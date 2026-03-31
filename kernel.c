@@ -1,5 +1,7 @@
 #include "kernel.h"
+#include "test_common.h"
 #include "common.h"
+#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[];
 
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3,
@@ -46,10 +48,9 @@ void putchar(char ch) {
 }
 
 void kernel_main(void) {
-    char* s = "Hello World!!";
-    unsigned int x = 0xff;
-    int num = 1001;
-    printf("test string:\n%s\ntest pointer:\n%x\ntest num:\n%d\n",s,x,num);
+    #ifdef TEST
+        test_common();
+    #endif
     for (;;) {
         __asm__ __volatile__("wfi");
     }
