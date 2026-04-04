@@ -51,6 +51,7 @@ void kernel_main(void) {
     #ifdef TEST
         test_common();
     #endif
+    PANIC("Booted!");
     for (;;) {
         __asm__ __volatile__("wfi");
     }
