@@ -1,20 +1,10 @@
 #include "kernel.h"
 #include "test_common.h"
 #include "common.h"
+#include "allocator.h"
 //#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[];
 
-paddr_t alloc_pages(uint32_t n) {
-    static paddr_t next_paddr = (paddr_t) __free_ram;
-    paddr_t paddr = next_paddr;
-    next_paddr += n * PAGE_SIZE;
-
-    if (next_paddr > (paddr_t) __free_ram_end)
-        PANIC("out of memory");
-
-    memset((void *) paddr, 0, n * PAGE_SIZE);
-    return paddr;
-}
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -152,10 +142,18 @@ void kernel_main(void) {
         test_common();
         __asm__ __volatile__("unimp");
     #endif
-    paddr_t paddr0 = alloc_pages(2);
-    paddr_t paddr1 = alloc_pages(1);
-    printf("alloc_pages test: paddr0=%x\n", paddr0);
-    printf("alloc_pages test: paddr1=%x\n", paddr1);
+    init_regions();
+    int region_idx1 = alloc_pages(2);
+    int region_idx2 = alloc_pages(1);
+    printf("alloc_pages test: region1=%d, paddr=%x\n",
+           region_idx1,
+           (unsigned int)region_to_addr(region_idx1));
+
+    printf("alloc_pages test: region2=%d, paddr=%x\n",
+           region_idx2,
+           (unsigned int)region_to_addr(region_idx2));
+    release_pages(region_idx1);
+    release_pages(region_idx2);
 
     PANIC("booted!");
 }
