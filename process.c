@@ -55,6 +55,7 @@ void init_processes(void) {
 
     // Create an idle process that runs when no other process is runnable.
     idle_proc = create_process((uint32_t) NULL);
+    idle_proc->pid = 0; // PID 0 is reserved for the idle process
     current_proc = idle_proc;
 }
 
