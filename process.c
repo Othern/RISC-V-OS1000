@@ -2,6 +2,8 @@
 #include "common.h"
 #include "kernel.h"
 struct process procs[PROCS_MAX]; // All process control structures.
+struct process *current_proc; // Currently running process
+struct process *idle_proc;    // Idle process
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp,
                                            uint32_t *next_sp) {
@@ -43,6 +45,37 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp,
         "addi sp, sp, 13 * 4\n"  // We've popped 13 4-byte registers from the stack
         "ret\n"
     );
+}
+void init_processes(void) {
+    for (int i = 0; i < PROCS_MAX; i++) {
+        procs[i].pid = 0;
+        procs[i].state = PROC_UNUSED;
+        procs[i].sp = 0;
+    }
+
+    // Create an idle process that runs when no other process is runnable.
+    idle_proc = create_process((uint32_t) NULL);
+    current_proc = idle_proc;
+}
+
+void yield(void){
+    struct process *next = idle_proc;
+    for (int i = 0; i < PROCS_MAX; i++) {
+        struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+        if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
+            next = proc;
+            break;
+        }
+    }
+
+    // If there's no runnable process other than the current one, return and continue processing
+    if (next == current_proc)
+        return;
+
+    // Context switch
+    struct process *prev = current_proc;
+    current_proc = next;
+    switch_context(&prev->sp, &next->sp);
 }
 
 struct process *create_process(uint32_t pc) {
