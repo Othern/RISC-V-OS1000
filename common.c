@@ -118,3 +118,8 @@ int strcmp(const char *s1,const char *s2){
     }
     return *(unsigned char*)s1 - *(unsigned char*)s2;
 }
+
+void delay(void){
+    for(int i=0; i<1000000; i++)
+        __asm__ __volatile__("nop");
+}
