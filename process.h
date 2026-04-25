@@ -2,7 +2,7 @@
 
 #define PROC_UNUSED   0   // Unused process control structure
 #define PROC_RUNNABLE 1   // Runnable process
-
+#include "common.h"
 struct process {
     int pid;             // Process ID
     int state;           // Process state: PROC_UNUSED or PROC_RUNNABLE

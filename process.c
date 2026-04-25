@@ -1,4 +1,6 @@
 #include "process.h"
+#include "common.h"
+#include "kernel.h"
 struct process procs[PROCS_MAX]; // All process control structures.
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp,
