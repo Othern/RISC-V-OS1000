@@ -73,6 +73,13 @@ void yield(void){
     if (next == current_proc)
         return;
 
+    // Set sscratch to the top of the next process's stack. This allows the trap handler to save the
+    __asm__ __volatile__(
+        "csrw sscratch, %[sscratch]\n"
+        :
+        : [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
+    );
+
     // Context switch
     struct process *prev = current_proc;
     current_proc = next;
