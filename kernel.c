@@ -5,7 +5,7 @@
 #include "test_process.h"
 #include "allocator.h"
 //#define TEST  1
-extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[];
+extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
 
 
 __attribute__((naked))
