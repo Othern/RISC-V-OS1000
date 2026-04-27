@@ -125,7 +125,7 @@ struct process *create_process(uint32_t pc) {
     *--sp = (uint32_t) pc;          // ra
 
     // Map kernel pages.
-    uint32_t *page_table = (uint32_t *) alloc_pages(1);
+    uint32_t *page_table = (uint32_t *) region_to_addr(alloc_pages(1));
     for (paddr_t paddr = (paddr_t) __kernel_base;
          paddr < (paddr_t) __free_ram_end; paddr += PAGE_SIZE)
         map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);

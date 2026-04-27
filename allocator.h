@@ -38,4 +38,6 @@ void release_pages(int region_idx);
 /* helper: 取得位址 */
 paddr_t region_to_addr(int region_idx);
 
+void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags);
+
 #endif

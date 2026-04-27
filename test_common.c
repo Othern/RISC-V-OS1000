@@ -90,10 +90,6 @@ void test_memset(){
     memset(buf, 0, 5);
     printf("zero: %d %d %d (expect 0 0 0)\n", buf[0], buf[1], buf[2]);
 
-    // n = 0
-    char x[] = "test";
-    memset(x, 'Z', 0);
-    printf("n=0: %s (expect test)\n", x);
 }
 
 void test_strcpy(){

@@ -127,7 +127,7 @@ struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3,
 	
 }
 
-void putchar(char ch) {
+void putchar(const char ch) {
     // fid = 0, eid = 1 =  Console Putchar (EID #0x01)
     /*
     long sbi_console_putchar(int ch)
