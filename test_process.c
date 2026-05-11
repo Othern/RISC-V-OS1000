@@ -23,7 +23,7 @@ static inline void proc_b_entry(void) {
 }
 
 void test_process(void) {
-    proc_a = create_process((uint32_t) proc_a_entry);
-    proc_b = create_process((uint32_t) proc_b_entry);
+    // proc_a = create_process((uint32_t) proc_a_entry);
+    // proc_b = create_process((uint32_t) proc_b_entry);
     yield();
 }

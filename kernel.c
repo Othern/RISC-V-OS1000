@@ -6,7 +6,7 @@
 #include "allocator.h"
 //#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
-
+extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -165,10 +165,15 @@ void kernel_main(void) {
             (unsigned int)region_to_addr(region_idx2));
         release_pages(region_idx1);
         release_pages(region_idx2);
+        // Test process creation and context switching
+        test_process();
     #endif
-    // Test process creation and context switching
-    test_process();
-    PANIC("booted!");
+
+     // new!
+    create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
+
+    yield();
+    PANIC("switched to idle process");
 }
 
 __attribute__((section(".text.boot")))
