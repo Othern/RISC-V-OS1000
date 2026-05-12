@@ -7,7 +7,6 @@ struct process *current_proc; // Currently running process
 struct process *idle_proc;    // Idle process
 
 extern char __kernel_base[], __free_ram_end[];
-extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp,
                                            uint32_t *next_sp) {

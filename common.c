@@ -1,7 +1,5 @@
 #include "common.h"
 
-void putchar(char ch);
-
 static inline void printString(const char* s){
     while (*s) {
         putchar(*s);
