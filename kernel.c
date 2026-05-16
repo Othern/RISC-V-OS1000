@@ -4,6 +4,7 @@
 #include "test_common.h"
 #include "test_process.h"
 #include "allocator.h"
+#include "virtio.h"
 //#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
 extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
@@ -184,32 +185,27 @@ void kernel_main(void) {
     memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
     init_regions();
+    virtio_blk_init(); 
     init_processes();
     #ifdef TEST
         // Test common functions
         test_common();
         __asm__ __volatile__("unimp");
 
-        // Test alloc_pages and release_pages
-        int region_idx1 = alloc_pages(2);
-        int region_idx2 = alloc_pages(1);
-        printf("alloc_pages test: region1=%d, paddr=%x\n",
-            region_idx1,
-            (unsigned int)region_to_addr(region_idx1));
-
-        printf("alloc_pages test: region2=%d, paddr=%x\n",
-            region_idx2,
-            (unsigned int)region_to_addr(region_idx2));
-        release_pages(region_idx1);
-        release_pages(region_idx2);
         // Test process creation and context switching
         test_process();
     #endif
 
-     // new!
     create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
 
     yield();
+    dump_procs();
+    char buf[SECTOR_SIZE];
+    read_write_disk(buf, 0, false /* read from the disk */);
+    printf("first sector: %s\n", buf);
+    
+    strcpy(buf, "hello from kernel!!!\n");
+    read_write_disk(buf, 0, true /* write to the disk */);
     PANIC("switched to idle process");
 }
 

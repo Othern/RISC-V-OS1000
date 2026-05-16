@@ -22,7 +22,7 @@ void init_regions(void) {
     }
 }
 
-int alloc_pages(uint32_t num_pages) {
+static uint32_t alloc_region(uint32_t num_pages) {
     uint32_t required_size = num_pages * PAGE_SIZE;
 
     int free_idx = find_suitable_free_region(required_size);
@@ -60,7 +60,7 @@ void release_pages(int region_idx) {
     }
 
     if (regions[region_idx].state != REGION_ALLOCATED) {
-        PANIC("region is not allocated");
+        PANIC(" %d region is not allocated", region_idx);
     }
 
     regions[region_idx].state = REGION_FREE;
@@ -69,7 +69,7 @@ void release_pages(int region_idx) {
     merge_free_regions();
 }
 
-paddr_t region_to_addr(int region_idx) {
+static paddr_t region_to_addr(int region_idx) {
     if (region_idx < 0 || region_idx >= MAX_REGIONS) {
         PANIC("invalid region index");
     }
@@ -79,6 +79,10 @@ paddr_t region_to_addr(int region_idx) {
     return regions[region_idx].start;
 }
 
+paddr_t alloc_pages(uint32_t* region_idx, uint32_t num_pages) {
+    *region_idx = alloc_region(num_pages);
+    return region_to_addr(*region_idx);
+}
 static int find_unused_region_slot(void) {
     for (int i = 0; i < MAX_REGIONS; i++) {
         if (regions[i].state == REGION_UNUSED) {
@@ -114,24 +118,4 @@ static void merge_free_regions(void) {
             }
         }
     }
-}
-
-void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags) {
-    if (!is_aligned(vaddr, PAGE_SIZE))
-        PANIC("unaligned vaddr %x", vaddr);
-
-    if (!is_aligned(paddr, PAGE_SIZE))
-        PANIC("unaligned paddr %x", paddr);
-
-    uint32_t vpn1 = (vaddr >> 22) & 0x3ff;
-    if ((table1[vpn1] & PAGE_V) == 0) {
-        // Create the 2nd level page table if it doesn't exist.
-        uint32_t pt_paddr = region_to_addr(alloc_pages(1));
-        table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) | PAGE_V;
-    }
-
-    // Set the 2nd level page table entry to map the physical page.
-    uint32_t vpn0 = (vaddr >> 12) & 0x3ff;
-    uint32_t *table0 = (uint32_t *) ((table1[vpn1] >> 10) * PAGE_SIZE);
-    table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
 }

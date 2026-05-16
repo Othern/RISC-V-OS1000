@@ -1,7 +1,6 @@
 #pragma once
 #include "common.h"
 #define SCAUSE_ECALL 8
-#define PROC_EXITED   2
 struct sbiret {
 	long error;
 	long value;

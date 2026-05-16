@@ -30,14 +30,10 @@ extern region_t regions[MAX_REGIONS];
 void init_regions(void);
 
 /* 回傳 region index，失敗回傳 -1 */
-int alloc_pages(uint32_t num_pages);
+paddr_t alloc_pages(uint32_t* region_idx, uint32_t num_pages);
 
 /* 透過 index 釋放 */
 void release_pages(int region_idx);
 
-/* helper: 取得位址 */
-paddr_t region_to_addr(int region_idx);
-
-void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags);
 
 #endif
