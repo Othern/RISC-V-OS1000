@@ -14,6 +14,7 @@
 │   ├── common.h
 │   ├── kernel.h
 │   ├── process.h
+│   ├── syscall.h
 │   ├── user.h
 │   └── virtio.h
 ├── kernel/              # kernel 與核心模組實作
@@ -21,6 +22,7 @@
 │   ├── common.c         # printf、memcpy、memset、strcpy、strcmp 等共用函式
 │   ├── kernel.c         # 開機入口、trap handler、syscall、SBI console I/O
 │   ├── process.c        # process table、context switch、排程、page table mapping
+│   ├── syscall.c        # syscall dispatch 與 kernel-side syscall handler
 │   └── virtio.c         # VirtIO block 裝置初始化與 sector read/write
 ├── linker/              # linker scripts
 │   ├── kernel.ld        # kernel 載入位置、stack、free RAM
@@ -31,7 +33,9 @@
 │   ├── test_common.c
 │   ├── test_common.h
 │   ├── test_process.c
-│   └── test_process.h
+│   ├── test_process.h
+│   ├── test_virtio.c
+│   └── test_virtio.h
 └── user/                # user mode runtime 與 shell
     ├── shell.c          # user shell，支援 hello / exit
     └── user.c           # user runtime 與 syscall wrapper
@@ -43,7 +47,7 @@
 
 `kernel/kernel.c` 是核心主流程所在。`boot()` 由 linker script 指定為 kernel 入口，設定 stack 後跳到 `kernel_main()`。`kernel_main()` 會清空 BSS、設定 trap vector、初始化記憶體配置器、VirtIO block、process table，接著建立 user shell process 並開始排程。
 
-trap 進入點是 `kernel_entry()`，它會保存暫存器後呼叫 `handle_trap()`。目前主要處理 user mode 的 `ecall`，並在 `handle_syscall()` 中支援：
+trap 進入點是 `kernel_entry()`，它會保存暫存器後呼叫 `handle_trap()`。目前主要處理 user mode 的 `ecall`，並轉交給 `kernel/syscall.c` 中的 `handle_syscall()`。目前支援：
 
 - `SYS_PUTCHAR`：輸出字元
 - `SYS_GETCHAR`：讀取字元，沒有輸入時會 `yield()`
@@ -73,7 +77,7 @@ trap 進入點是 `kernel_entry()`，它會保存暫存器後呼叫 `handle_trap
 
 `kernel/virtio.c` 針對 QEMU virt machine 上的 VirtIO block MMIO 裝置進行初始化。`virtio_blk_init()` 檢查 magic、version、device id，建立 virtqueue，並取得磁碟容量。
 
-`read_write_disk()` 使用 3 個 descriptor 組成 block request，可讀寫指定 sector。目前 `kernel_main()` 會示範讀取 sector 0，接著寫入 `hello from kernel!!!`。
+`read_write_disk()` 使用 3 個 descriptor 組成 block request，可讀寫指定 sector。目前 VirtIO read/write demo 已整理到 `tests/test_virtio.c`，由 `kernel_main()` 呼叫 `test_virtio()` 執行。
 
 ## Build 與執行
 
@@ -117,6 +121,7 @@ make clean   # 清除 build/
 
 - `test_common()`：測試 printf、memcpy、memset、strcpy、strcmp
 - `test_process()`：測試 process 建立與 context switch
+- `test_virtio()`：示範 VirtIO block sector read/write
 
 ## 產生檔案
 
@@ -129,4 +134,3 @@ make clean   # 清除 build/
 - `shell.bin`
 - `shell.bin.o`
 - `qemu.log`
-

@@ -17,11 +17,13 @@ OPEN_SBI :=  opensbi-riscv32-generic-fw_dynamic.bin
 USER_SRCS := user/shell.c user/user.c kernel/common.c
 KERNEL_SRCS := \
 	kernel/kernel.c \
+	kernel/syscall.c \
 	kernel/common.c \
 	tests/test_common.c \
 	kernel/allocator.c \
 	kernel/process.c \
 	tests/test_process.c \
+	tests/test_virtio.c \
 	kernel/virtio.c
 
 HEADERS := $(wildcard include/*.h tests/*.h)
@@ -60,7 +62,7 @@ $(DISK):
 $(OPEN_SBI):
 	curl -LO https://github.com/qemu/qemu/raw/v8.0.4/pc-bios/$(OPEN_SBI)
 
-run: $(KERNEL_ELF) $(OPEN_SBI)
+run: $(KERNEL_ELF) $(DISK) $(OPEN_SBI)
 	$(QEMU) -machine virt -bios default -nographic -serial mon:stdio --no-reboot \
 		-d unimp,guest_errors,int,cpu_reset -D $(BUILD_DIR)/qemu.log \
 		-drive id=drive0,file=$(DISK),format=raw,if=none \
@@ -68,9 +70,9 @@ run: $(KERNEL_ELF) $(OPEN_SBI)
 		-kernel $(KERNEL_ELF)
 
 test:
-	$(MAKE) cleanmake
+	$(MAKE) clean
 	$(MAKE) CFLAGS_EXTRA=-DTEST run
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm $(DISK)
+	rm -f $(DISK)

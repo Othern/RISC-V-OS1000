@@ -3,7 +3,9 @@
 #include "common.h"
 #include "test_common.h"
 #include "test_process.h"
+#include "test_virtio.h"
 #include "allocator.h"
+#include "syscall.h"
 #include "virtio.h"
 //#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
@@ -93,32 +95,6 @@ void kernel_entry(void) {
     );
 }
 
-void handle_syscall(struct trap_frame *f) {
-    switch (f->a3) {
-        case SYS_PUTCHAR:
-            putchar(f->a0);
-            break;
-        case SYS_GETCHAR:
-            while (1) {
-                long ch = getchar();
-                if (ch >= 0) {
-                    f->a0 = ch;
-                    break;
-                }
-                yield();
-            }
-            break;
-
-        case SYS_EXIT:
-            printf("process %d exited\n", current_proc->pid);
-            current_proc->state = PROC_EXITED;
-            yield();
-            PANIC("unreachable");
-        default:
-            PANIC("unexpected syscall a3=%x\n", f->a3);
-    }
-}
-
 void handle_trap(struct trap_frame *f) {
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
@@ -194,18 +170,13 @@ void kernel_main(void) {
 
         // Test process creation and context switching
         test_process();
+        test_virtio();
     #endif
-
-    create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
-
-    yield();
+        
     dump_procs();
-    char buf[SECTOR_SIZE];
-    read_write_disk(buf, 0, false /* read from the disk */);
-    printf("first sector: %s\n", buf);
-    
-    strcpy(buf, "hello from kernel!!!\n");
-    read_write_disk(buf, 0, true /* write to the disk */);
+    create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
+    dump_procs();    
+    yield();
     PANIC("switched to idle process");
 }
 

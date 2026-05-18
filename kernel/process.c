@@ -69,7 +69,7 @@ void init_processes(void) {
 }
 
 static void release_process(struct process *proc) {
-    for (int i = 0; i < proc->current_idx; i++) {
+    for (uint32_t i = 0; i < proc->current_idx; i++) {
         if (proc->regions[i]) {
             release_pages(proc->regions[i]);
             proc->regions[i] = 0;
@@ -205,7 +205,7 @@ struct process *create_process(const void *image, size_t image_size) {
 }
 
 void dump_procs(void) {
-    for(int i=0; i< PROCS_MAX; i++) {
+    for(uint32_t i=0; i< PROCS_MAX; i++) {
         struct process *proc = &procs[i];
         printf("process {\n");
         printf("  pid        = %d\n", proc->pid);
