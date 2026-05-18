@@ -1,10 +1,6 @@
 #pragma once
 #include "common.h"
 #define SCAUSE_ECALL 8
-struct sbiret {
-	long error;
-	long value;
-};
 
 #define PANIC(fmt,...)    \
 	do {    \

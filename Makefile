@@ -24,7 +24,8 @@ KERNEL_SRCS := \
 	kernel/process.c \
 	tests/test_process.c \
 	tests/test_virtio.c \
-	kernel/virtio.c
+	kernel/virtio.c \
+	kernel/sbi.c
 
 HEADERS := $(wildcard include/*.h tests/*.h)
 
