@@ -1,7 +1,8 @@
 #pragma once
 #include "common.h"
 #define SCAUSE_ECALL 8
-
+#define SSTATUS_SPIE (1 << 5) // enable interrupt when going into user mode
+#define SSTATUS_SUM  (1 << 18)
 #define PANIC(fmt,...)    \
 	do {    \
 		printf("PANIC: %s:%d:" fmt "\n",__FILE__,__LINE__, ##__VA_ARGS__);   \

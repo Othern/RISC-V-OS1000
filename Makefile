@@ -11,7 +11,7 @@ CFLAGS := -std=c11 -O2 -g3 -Wall -Wextra --target=riscv32-unknown-elf \
 
 USER_LD := linker/user.ld
 KERNEL_LD := linker/kernel.ld
-DISK := lorem.txt
+DISK := disk.tar
 OPEN_SBI :=  opensbi-riscv32-generic-fw_dynamic.bin
 
 USER_SRCS := user/shell.c user/user.c kernel/common.c
@@ -25,6 +25,7 @@ KERNEL_SRCS := \
 	tests/test_process.c \
 	tests/test_virtio.c \
 	kernel/virtio.c \
+	kernel/filesystem.c \
 	kernel/sbi.c
 
 HEADERS := $(wildcard include/*.h tests/*.h)
@@ -58,7 +59,12 @@ $(KERNEL_ELF): $(KERNEL_SRCS) $(KERNEL_LD) $(SHELL_OBJ) $(HEADERS) | $(BUILD_DIR
 	$(CC) $(CFLAGS) -Wl,-T$(KERNEL_LD) -Wl,-Map=$(BUILD_DIR)/kernel.map -o $@ $(KERNEL_SRCS) $(SHELL_OBJ)
 
 $(DISK):
-	@echo "Lorem ipsum dolor sit amet, consectetur adipiscing elit. In ut magna consequat, cursus velit aliquam, scelerisque odio. Ut lorem eros, feugiat quis bibendum vitae, malesuada ac orci. Praesent eget quam non nunc fringilla cursus imperdiet non tellus. Aenean dictum lobortis turpis, non interdum leo rhoncus sed. Cras in tellus auctor, faucibus tortor ut, maximus metus. Praesent placerat ut magna non tristique. Pellentesque at nunc quis dui tempor vulputate. Vestibulum vitae massa orci. Mauris et tellus quis risus sagittis placerat. Integer lorem leo, feugiat sed molestie non, viverra a tellus." > $(DISK)
+	@echo "==> Building $(DISK)"
+	@echo "    Source directory: disk/"
+	@echo "    Input files: disk/*.txt"
+	@echo "    Output file: $(DISK)"
+	@cd disk && tar cf ../$(DISK) --format=ustar *.txt
+	@echo "==> Finished building $(DISK)"
 
 $(OPEN_SBI):
 	curl -LO https://github.com/qemu/qemu/raw/v8.0.4/pc-bios/$(OPEN_SBI)
