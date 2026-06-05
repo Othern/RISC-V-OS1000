@@ -1,9 +1,14 @@
+#pragma once
 #include "common.h"
 #include "kernel.h"
-#define SECTOR_SIZE       512
 #define VIRTQ_ENTRY_NUM   16
 #define VIRTIO_DEVICE_BLK 2
+#define VIRTIO_DEVICE_NET 1
 #define VIRTIO_BLK_PADDR  0x10001000
+#define VIRTIO_NET_PADDR  0x10002000
+#define VIRTIO_MMIO_PADDR_START 0x10001000
+#define VIRTIO_MMIO_PADDR_END   0x10008000
+#define VIRTIO_MMIO_STRIDE      0x1000
 #define VIRTIO_REG_MAGIC         0x00
 #define VIRTIO_REG_VERSION       0x04
 #define VIRTIO_REG_DEVICE_ID     0x08
@@ -22,8 +27,11 @@
 #define VIRTQ_DESC_F_NEXT          1
 #define VIRTQ_DESC_F_WRITE         2
 #define VIRTQ_AVAIL_F_NO_INTERRUPT 1
-#define VIRTIO_BLK_T_IN  0
-#define VIRTIO_BLK_T_OUT 1
+
+struct virtio_device {
+    paddr_t base;
+    uint32_t device_id;
+};
 
 // Virtqueue Descriptor Table entry.
 struct virtq_desc {
@@ -63,25 +71,16 @@ struct virtio_virtq {
     uint16_t last_used_index;
 } __attribute__((packed));
 
-// Virtio-blk request.
-struct virtio_blk_req {
-
-    // First descriptor: read-only from the device
-    uint32_t type;
-    uint32_t reserved;
-    uint64_t sector;
-
-    // Second descriptor: writable by the device if it's a read operation (VIRTQ_DESC_F_WRITE)
-    uint8_t data[512];
-
-     // Third descriptor: writable by the device (VIRTQ_DESC_F_WRITE)
-    uint8_t status;
-} __attribute__((packed));
-
-uint32_t virtio_reg_read32(unsigned offset);
-uint64_t virtio_reg_read64(unsigned offset);
-void virtio_reg_write32(unsigned offset, uint32_t value);
-void virtio_reg_fetch_and_or32(unsigned offset, uint32_t value);
-struct virtio_virtq *virtq_init(unsigned index);
-void read_write_disk(void *buf, unsigned sector, int is_write);
-void virtio_blk_init(void);
+uint32_t virtio_reg_read32(struct virtio_device *dev, unsigned offset);
+uint64_t virtio_reg_read64(struct virtio_device *dev, unsigned offset);
+void virtio_reg_write32(struct virtio_device *dev, unsigned offset, uint32_t value);
+void virtio_reg_fetch_and_or32(struct virtio_device *dev, unsigned offset, uint32_t value);
+bool virtio_probe(struct virtio_device *dev, paddr_t base, uint32_t device_id);
+bool virtio_find_device(struct virtio_device *dev, uint32_t device_id);
+void virtio_begin_init(struct virtio_device *dev);
+void virtio_finish_init(struct virtio_device *dev);
+struct virtio_virtq *virtq_init(struct virtio_device *dev, unsigned index);
+void virtq_push(struct virtio_virtq *vq, int desc_index);
+void virtq_notify(struct virtio_device *dev, struct virtio_virtq *vq);
+void virtq_kick(struct virtio_device *dev, struct virtio_virtq *vq, int desc_index);
+bool virtq_is_busy(struct virtio_virtq *vq);

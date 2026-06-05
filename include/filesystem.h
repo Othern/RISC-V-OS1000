@@ -1,4 +1,6 @@
+#pragma once
 #include "common.h"
+#include "virtio_blk.h"
 #define FILES_MAX      2
 #define DISK_MAX_SIZE  align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
 struct tar_header {

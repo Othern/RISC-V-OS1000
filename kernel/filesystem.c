@@ -1,5 +1,5 @@
 #include "filesystem.h"
-#include "virtio.h"
+#include "virtio_blk.h"
 #include "common.h"
 
 struct file files[FILES_MAX];

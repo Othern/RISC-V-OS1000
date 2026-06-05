@@ -179,6 +179,7 @@ struct process *create_process(const void *image, size_t image_size) {
         
     // virtio-blk
     map_page(proc, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
+    map_page(proc, VIRTIO_NET_PADDR, VIRTIO_NET_PADDR, PAGE_R | PAGE_W);
 
     // Map user pages.
     for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {

@@ -13,6 +13,13 @@ USER_LD := linker/user.ld
 KERNEL_LD := linker/kernel.ld
 DISK := disk.tar
 OPEN_SBI :=  opensbi-riscv32-generic-fw_dynamic.bin
+NETDEV ?= user
+
+ifeq ($(NETDEV),tap)
+NETDEV_ARGS := -netdev tap,id=net0,ifname=tap0,script=no,downscript=no
+else
+NETDEV_ARGS := -netdev user,id=net0
+endif
 
 USER_SRCS := user/shell.c user/user.c kernel/common.c
 KERNEL_SRCS := \
@@ -24,7 +31,10 @@ KERNEL_SRCS := \
 	kernel/process.c \
 	tests/test_process.c \
 	tests/test_virtio.c \
+	tests/test_virtio_net.c \
 	kernel/virtio.c \
+	kernel/virtio_blk.c \
+	kernel/virtio_net.c \
 	kernel/filesystem.c \
 	kernel/sbi.c
 
@@ -74,6 +84,8 @@ run: $(KERNEL_ELF) $(DISK) $(OPEN_SBI)
 		-d unimp,guest_errors,int,cpu_reset -D $(BUILD_DIR)/qemu.log \
 		-drive id=drive0,file=$(DISK),format=raw,if=none \
 		-device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
+		$(NETDEV_ARGS) \
+		-device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.1,mac=52:54:00:12:34:56 \
 		-kernel $(KERNEL_ELF)
 
 test:

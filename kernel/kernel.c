@@ -4,9 +4,11 @@
 #include "test_common.h"
 #include "test_process.h"
 #include "test_virtio.h"
+#include "test_virtio_net.h"
 #include "allocator.h"
 #include "syscall.h"
-#include "virtio.h"
+#include "virtio_blk.h"
+#include "virtio_net.h"
 #include "filesystem.h"
 #include "sbi.h"
 //#define TEST  1
@@ -115,22 +117,28 @@ void kernel_main(void) {
     memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
     init_regions();
-    virtio_blk_init(); 
+    virtio_blk_init();
+    virtio_net_init();
+    virtio_net_send_test_packet();
+    virtio_net_poll();
     fs_init();
     init_processes();
     #ifdef TEST
+        test_virtio_net_tx();
+        test_virtio_net_rx();
+
         // Test common functions
-        test_common();
-        __asm__ __volatile__("unimp");
+        // test_common();
+        // __asm__ __volatile__("unimp");
 
         // Test process creation and context switching
-        test_process();
+        // test_process();
         test_virtio();
     #endif
-        
-    dump_procs();
-    create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);    
-    yield();
+
+    // dump_procs();
+    // create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
+    // yield();
     PANIC("switched to idle process");
 }
 

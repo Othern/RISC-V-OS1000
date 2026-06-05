@@ -1,6 +1,6 @@
 #include "test_virtio.h"
 #include "common.h"
-#include "virtio.h"
+#include "virtio_blk.h"
 
 void test_virtio(void) {
     char buf[SECTOR_SIZE];
