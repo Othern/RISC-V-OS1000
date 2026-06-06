@@ -14,6 +14,7 @@ struct virtio_net_hdr {
 } __attribute__((packed));
 
 void virtio_net_init(void);
+void virtio_net_irq(void);
 void virtio_net_poll(void);
 void virtio_net_send_test_packet(void);
 uint32_t virtio_net_rx_packets(void);

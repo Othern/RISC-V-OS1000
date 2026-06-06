@@ -19,13 +19,14 @@ static uint32_t net_rx_region;
 static uint32_t net_tx_region;
 static paddr_t net_rx_paddr;
 static paddr_t net_tx_paddr;
-static uint16_t net_rx_used_index;
 static uint32_t net_rx_packets;
 static uint32_t net_rx_test_packets;
 static uint32_t net_last_rx_len;
 static uint16_t net_last_rx_ethertype;
 static uint32_t net_tx_packets;
 static uint32_t net_last_tx_len;
+static uint32_t net_pending_tx_len;
+static volatile bool net_tx_done;
 
 static void virtio_net_enqueue_rx(unsigned index) {
     net_rx_vq->descs[index].addr = net_rx_paddr + index * sizeof(struct virtio_net_buf);
@@ -52,13 +53,14 @@ void virtio_net_init(void) {
                                align_up(sizeof(struct virtio_net_buf), PAGE_SIZE) / PAGE_SIZE);
     net_rx_bufs = (struct virtio_net_buf *) net_rx_paddr;
     net_tx_buf = (struct virtio_net_buf *) net_tx_paddr;
-    net_rx_used_index = 0;
     net_rx_packets = 0;
     net_rx_test_packets = 0;
     net_last_rx_len = 0;
     net_last_rx_ethertype = 0;
     net_tx_packets = 0;
     net_last_tx_len = 0;
+    net_pending_tx_len = 0;
+    net_tx_done = false;
 
     for (unsigned i = 0; i < NET_RX_BUF_NUM; i++)
         virtio_net_enqueue_rx(i);
@@ -69,15 +71,13 @@ void virtio_net_init(void) {
            net_dev.base, NET_RX_QUEUE, NET_TX_QUEUE);
 }
 
-void virtio_net_poll(void) {
-    if (!net_rx_vq)
-        return;
+static void virtio_net_drain_rx(void) {
+    struct virtq_used_elem used;
+    bool recycled = false;
 
-    while (net_rx_used_index != *net_rx_vq->used_index) {
-        struct virtq_used_elem *used =
-            &net_rx_vq->used.ring[net_rx_used_index % VIRTQ_ENTRY_NUM];
-        unsigned desc_index = used->id;
-        unsigned packet_len = used->len;
+    while (virtq_pop_used(net_rx_vq, &used)) {
+        unsigned desc_index = used.id;
+        unsigned packet_len = used.len;
 
         if (packet_len >= sizeof(struct virtio_net_hdr) + 14) {
             uint8_t *frame = net_rx_bufs[desc_index].frame;
@@ -96,11 +96,41 @@ void virtio_net_poll(void) {
             printf("virtio-net: rx short packet len=%d\n", packet_len);
         }
 
-        net_rx_used_index++;
         virtio_net_enqueue_rx(desc_index);
+        recycled = true;
     }
 
-    virtq_notify(&net_dev, net_rx_vq);
+    if (recycled)
+        virtq_notify(&net_dev, net_rx_vq);
+}
+
+static void virtio_net_drain_tx(void) {
+    struct virtq_used_elem used;
+
+    while (virtq_pop_used(net_tx_vq, &used)) {
+        net_tx_packets++;
+        net_last_tx_len = net_pending_tx_len;
+        net_tx_done = true;
+    }
+}
+
+void virtio_net_irq(void) {
+    uint32_t status = virtio_irq_status(&net_dev);
+    if (status)
+        virtio_irq_ack(&net_dev, status);
+
+    if (status & VIRTIO_INT_USED_BUFFER) {
+        virtio_net_drain_rx();
+        virtio_net_drain_tx();
+    }
+}
+
+void virtio_net_poll(void) {
+    if (!net_rx_vq)
+        return;
+
+    virtio_net_drain_rx();
+    virtio_net_drain_tx();
 }
 
 void virtio_net_send_test_packet(void) {
@@ -128,13 +158,11 @@ void virtio_net_send_test_packet(void) {
     net_tx_vq->descs[0].flags = 0;
     net_tx_vq->descs[0].next = 0;
 
+    net_pending_tx_len = frame_len;
+    net_tx_done = false;
     virtq_kick(&net_dev, net_tx_vq, 0);
 
-    while (virtq_is_busy(net_tx_vq))
-        ;
-
-    net_tx_packets++;
-    net_last_tx_len = frame_len;
+    wait_for_interrupt(&net_tx_done);
 
     printf("virtio-net: tx test frame len=%d\n", frame_len);
 }

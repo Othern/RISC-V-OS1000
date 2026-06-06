@@ -26,8 +26,10 @@ KERNEL_SRCS := \
 	kernel/kernel.c \
 	kernel/syscall.c \
 	kernel/common.c \
+	kernel/interrupt.c \
 	tests/test_common.c \
 	kernel/allocator.c \
+	kernel/plic.c \
 	kernel/process.c \
 	tests/test_process.c \
 	tests/test_virtio.c \

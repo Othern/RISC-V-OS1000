@@ -32,7 +32,6 @@ void test_virtio_net_rx(void) {
 
     for (int i = 0; i < VIRTIO_NET_RX_TEST_ROUNDS; i++) {
         printf("test_virtio_net_rx: receive round %d\n", i);
-        virtio_net_poll();
         if (virtio_net_rx_test_packets() != test_packets_before)
             break;
         for(int j=0; j < 1000; j++) delay();

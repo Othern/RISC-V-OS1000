@@ -21,6 +21,14 @@ void virtio_reg_fetch_and_or32(struct virtio_device *dev, unsigned offset, uint3
     virtio_reg_write32(dev, offset, virtio_reg_read32(dev, offset) | value);
 }
 
+uint32_t virtio_irq_status(struct virtio_device *dev) {
+    return virtio_reg_read32(dev, VIRTIO_REG_INTERRUPT_STATUS);
+}
+
+void virtio_irq_ack(struct virtio_device *dev, uint32_t status) {
+    virtio_reg_write32(dev, VIRTIO_REG_INTERRUPT_ACK, status);
+}
+
 bool virtio_probe(struct virtio_device *dev, paddr_t base, uint32_t device_id) {
     dev->base = base;
     dev->device_id = virtio_reg_read32(dev, VIRTIO_REG_DEVICE_ID);
@@ -61,7 +69,8 @@ struct virtio_virtq *virtq_init(struct virtio_device *dev, unsigned index) {
 
     vq->queue_index = index;
     vq->used_index = (volatile uint16_t *) &vq->used.index;
-    vq->last_used_index = 0;
+    vq->submitted_index = 0;
+    vq->consumed_used_index = 0;
 
     virtio_reg_write32(dev, VIRTIO_REG_QUEUE_SEL, index);
     virtio_reg_write32(dev, VIRTIO_REG_QUEUE_NUM, VIRTQ_ENTRY_NUM);
@@ -70,8 +79,10 @@ struct virtio_virtq *virtq_init(struct virtio_device *dev, unsigned index) {
 }
 
 void virtq_push(struct virtio_virtq *vq, int desc_index) {
-    vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_index;
-    vq->avail.index++;
+    uint16_t avail_index = vq->avail.index;
+    vq->avail.ring[avail_index % VIRTQ_ENTRY_NUM] = desc_index;
+    __sync_synchronize();
+    vq->avail.index = avail_index + 1;
     __sync_synchronize();
 }
 
@@ -81,10 +92,20 @@ void virtq_notify(struct virtio_device *dev, struct virtio_virtq *vq) {
 
 void virtq_kick(struct virtio_device *dev, struct virtio_virtq *vq, int desc_index) {
     virtq_push(vq, desc_index);
+    vq->submitted_index++;
     virtq_notify(dev, vq);
-    vq->last_used_index++;
+}
+
+bool virtq_pop_used(struct virtio_virtq *vq, struct virtq_used_elem *elem) {
+    if (vq->consumed_used_index == *vq->used_index)
+        return false;
+
+    __sync_synchronize();
+    *elem = vq->used.ring[vq->consumed_used_index % VIRTQ_ENTRY_NUM];
+    vq->consumed_used_index++;
+    return true;
 }
 
 bool virtq_is_busy(struct virtio_virtq *vq) {
-    return vq->last_used_index != *vq->used_index;
+    return vq->consumed_used_index != vq->submitted_index;
 }

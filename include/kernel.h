@@ -1,8 +1,14 @@
 #pragma once
 #include "common.h"
 #define SCAUSE_ECALL 8
+#define SCAUSE_INTERRUPT      (1u << 31)
+#define SCAUSE_CODE_MASK      0x7fffffffu
+#define SCAUSE_SUPERVISOR_EXT 9
+#define SSTATUS_SIE  (1 << 1)
 #define SSTATUS_SPIE (1 << 5) // enable interrupt when going into user mode
+#define SSTATUS_SPP  (1 << 8)
 #define SSTATUS_SUM  (1 << 18)
+#define SIE_SEIE     (1 << 9)
 #define PANIC(fmt,...)    \
 	do {    \
 		printf("PANIC: %s:%d:" fmt "\n",__FILE__,__LINE__, ##__VA_ARGS__);   \
@@ -44,6 +50,8 @@ struct trap_frame {
     uint32_t s11;
     uint32_t sp;
 } __attribute__((packed));
+
+void wait_for_interrupt(volatile bool *done);
 
 #define READ_CSR(reg)                                                          \
     ({                                                                         \

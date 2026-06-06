@@ -7,6 +7,7 @@ static struct virtio_blk_req *blk_req;
 static uint32_t blk_req_region;
 static paddr_t blk_req_paddr;
 static uint64_t blk_capacity;
+static volatile bool blk_done;
 
 void virtio_blk_init(void) {
     if (!virtio_probe(&blk_dev, VIRTIO_BLK_PADDR, VIRTIO_DEVICE_BLK))
@@ -23,6 +24,28 @@ void virtio_blk_init(void) {
     blk_req_paddr = alloc_pages(&blk_req_region,
                                 align_up(sizeof(*blk_req), PAGE_SIZE) / PAGE_SIZE);
     blk_req = (struct virtio_blk_req *) blk_req_paddr;
+    blk_done = false;
+
+    uint32_t irq_status = virtio_irq_status(&blk_dev);
+    if (irq_status)
+        virtio_irq_ack(&blk_dev, irq_status);
+}
+
+void virtio_blk_irq(void) {
+    uint32_t status = virtio_irq_status(&blk_dev);
+    if (status)
+        virtio_irq_ack(&blk_dev, status);
+
+    if (!(status & VIRTIO_INT_USED_BUFFER))
+        return;
+
+    struct virtq_used_elem used;
+    bool completed = false;
+    while (virtq_pop_used(blk_request_vq, &used))
+        completed = true;
+
+    if (completed)
+        blk_done = true;
 }
 
 void read_write_disk(void *buf, unsigned sector, int is_write) {
@@ -52,10 +75,10 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
     vq->descs[2].len = sizeof(uint8_t);
     vq->descs[2].flags = VIRTQ_DESC_F_WRITE;
 
+    blk_done = false;
     virtq_kick(&blk_dev, vq, 0);
 
-    while (virtq_is_busy(vq))
-        ;
+    wait_for_interrupt(&blk_done);
 
     if (blk_req->status != 0) {
         printf("virtio: warn: failed to read/write sector=%d status=%d\n",

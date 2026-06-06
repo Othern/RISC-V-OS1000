@@ -19,6 +19,8 @@
 #define VIRTIO_REG_QUEUE_PFN     0x40
 #define VIRTIO_REG_QUEUE_READY   0x44
 #define VIRTIO_REG_QUEUE_NOTIFY  0x50
+#define VIRTIO_REG_INTERRUPT_STATUS 0x60
+#define VIRTIO_REG_INTERRUPT_ACK    0x64
 #define VIRTIO_REG_DEVICE_STATUS 0x70
 #define VIRTIO_REG_DEVICE_CONFIG 0x100
 #define VIRTIO_STATUS_ACK       1
@@ -27,6 +29,9 @@
 #define VIRTQ_DESC_F_NEXT          1
 #define VIRTQ_DESC_F_WRITE         2
 #define VIRTQ_AVAIL_F_NO_INTERRUPT 1
+#define VIRTQ_USED_F_NO_NOTIFY     1
+#define VIRTIO_INT_USED_BUFFER     1
+#define VIRTIO_INT_CONFIG_CHANGE   2
 
 struct virtio_device {
     paddr_t base;
@@ -68,13 +73,16 @@ struct virtio_virtq {
     struct virtq_used used __attribute__((aligned(PAGE_SIZE)));
     int queue_index;
     volatile uint16_t *used_index;
-    uint16_t last_used_index;
+    uint16_t submitted_index;
+    uint16_t consumed_used_index;
 } __attribute__((packed));
 
 uint32_t virtio_reg_read32(struct virtio_device *dev, unsigned offset);
 uint64_t virtio_reg_read64(struct virtio_device *dev, unsigned offset);
 void virtio_reg_write32(struct virtio_device *dev, unsigned offset, uint32_t value);
 void virtio_reg_fetch_and_or32(struct virtio_device *dev, unsigned offset, uint32_t value);
+uint32_t virtio_irq_status(struct virtio_device *dev);
+void virtio_irq_ack(struct virtio_device *dev, uint32_t status);
 bool virtio_probe(struct virtio_device *dev, paddr_t base, uint32_t device_id);
 bool virtio_find_device(struct virtio_device *dev, uint32_t device_id);
 void virtio_begin_init(struct virtio_device *dev);
@@ -83,4 +91,5 @@ struct virtio_virtq *virtq_init(struct virtio_device *dev, unsigned index);
 void virtq_push(struct virtio_virtq *vq, int desc_index);
 void virtq_notify(struct virtio_device *dev, struct virtio_virtq *vq);
 void virtq_kick(struct virtio_device *dev, struct virtio_virtq *vq, int desc_index);
+bool virtq_pop_used(struct virtio_virtq *vq, struct virtq_used_elem *elem);
 bool virtq_is_busy(struct virtio_virtq *vq);

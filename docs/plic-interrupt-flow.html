@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLIC Interrupt 註冊與處理流程</title>
+  <style>
+    :root {
+      --page: #f4f6f8;
+      --surface: #ffffff;
+      --ink: #17202a;
+      --muted: #667085;
+      --line: #cbd3dd;
+      --cpu: #2563eb;
+      --cpu-soft: #eaf2ff;
+      --plic: #7c3aed;
+      --plic-soft: #f2edff;
+      --device: #b45309;
+      --device-soft: #fff3df;
+      --ok: #15803d;
+      --ok-soft: #eaf8ef;
+      --danger: #b42318;
+      --danger-soft: #fff0ef;
+      --code: #202938;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      line-height: 1.55;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .header-inner,
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .header-inner {
+      padding: 26px 0 20px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 7px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 7px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 880px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    main {
+      padding: 20px 0 38px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 18px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--shadow);
+    }
+
+    .tab-button {
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .tab-button:hover {
+      border-color: var(--line);
+      background: #f7f8fa;
+    }
+
+    .tab-button.active {
+      border-color: var(--cpu);
+      background: var(--cpu);
+      color: #ffffff;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .section {
+      margin-bottom: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .lead {
+      max-width: 880px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .swatch.cpu {
+      background: var(--cpu);
+    }
+
+    .swatch.plic {
+      background: var(--plic);
+    }
+
+    .swatch.device {
+      background: var(--device);
+    }
+
+    .registration {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .reg-step {
+      position: relative;
+      min-height: 194px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--cpu);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .reg-step.plic {
+      border-top-color: var(--plic);
+    }
+
+    .reg-step.device {
+      border-top-color: var(--device);
+    }
+
+    .step-number {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 10px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #edf0f4;
+      color: #17202a;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow: auto;
+      margin: 12px 0 0;
+      padding: 14px;
+      border-radius: 7px;
+      background: var(--code);
+      color: #f7fafc;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .note {
+      margin-top: 16px;
+      padding: 13px 14px;
+      border-left: 4px solid var(--cpu);
+      background: var(--cpu-soft);
+      font-size: 14px;
+    }
+
+    .note.warn {
+      border-left-color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .sequence {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .actor {
+      min-height: 116px;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .actor.device {
+      background: var(--device-soft);
+    }
+
+    .actor.plic {
+      background: var(--plic-soft);
+    }
+
+    .actor.cpu {
+      background: var(--cpu-soft);
+    }
+
+    .actor.active {
+      border-color: currentColor;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(16, 24, 40, 0.12);
+    }
+
+    .actor.device.active {
+      color: var(--device);
+    }
+
+    .actor.plic.active {
+      color: var(--plic);
+    }
+
+    .actor.cpu.active {
+      color: var(--cpu);
+    }
+
+    .actor p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 42px minmax(130px, 0.8fr) 32px minmax(0, 2fr);
+      gap: 10px;
+      align-items: center;
+      min-height: 60px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease;
+    }
+
+    .event:hover {
+      border-color: var(--cpu);
+    }
+
+    .event.active {
+      border-color: var(--cpu);
+      background: #f7faff;
+    }
+
+    .event-index {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .event-route {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .event-arrow {
+      color: var(--muted);
+      text-align: center;
+      font-size: 20px;
+    }
+
+    .event-detail {
+      font-size: 14px;
+    }
+
+    .event-detail strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .event-detail span {
+      color: var(--muted);
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .control-button {
+      min-width: 98px;
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .control-button:hover:not(:disabled) {
+      border-color: var(--cpu);
+    }
+
+    .control-button:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+
+    .counter {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .state-grid,
+    .compare-grid,
+    .reference-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .state-card,
+    .compare-card,
+    .reference-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .state-flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .state-pill {
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f7f8fa;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+    }
+
+    .state-pill.current {
+      border-color: var(--ok);
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-weight: 700;
+    }
+
+    .state-arrow {
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 11px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f7f8fa;
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .callout-title {
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--danger);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .reference-card p,
+    .compare-card p,
+    .state-card p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .source-list {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      font-size: 14px;
+    }
+
+    .source-list li {
+      margin-bottom: 6px;
+    }
+
+    a {
+      color: var(--cpu);
+    }
+
+    @media (max-width: 900px) {
+      .registration {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .state-grid,
+      .compare-grid,
+      .reference-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .header-inner,
+      main {
+        width: min(100% - 20px, 1180px);
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      .section {
+        padding: 15px;
+      }
+
+      .registration,
+      .sequence {
+        grid-template-columns: 1fr;
+      }
+
+      .event {
+        grid-template-columns: 36px minmax(0, 1fr);
+      }
+
+      .event-route,
+      .event-arrow {
+        display: none;
+      }
+
+      .transport {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>PLIC Interrupt 註冊與處理流程</h1>
+      <p class="subtitle">
+        以本專案的 VirtIO block IRQ 1 與 VirtIO network IRQ 2 為例，說明初始化時如何讓中斷可被送達，以及裝置提出 interrupt request 後，Device、PLIC、CPU 與 driver 之間的完整互動。
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <nav class="toolbar" aria-label="文件章節">
+      <button class="tab-button active" data-panel="registration">1. Interrupt 註冊</button>
+      <button class="tab-button" data-panel="runtime">2. IRQ 互動流程</button>
+      <button class="tab-button" data-panel="concepts">3. 狀態與責任</button>
+      <button class="tab-button" data-panel="reference">4. 專案對照</button>
+    </nav>
+
+    <section class="panel active" id="registration">
+      <div class="section">
+        <h2>PLIC Interrupt 的「註冊」</h2>
+        <p class="lead">
+          PLIC 沒有 callback registration API。這裡的「註冊」是 kernel 同時設定 PLIC source、CPU interrupt enable 與軟體 dispatch table，讓指定 IRQ 可以進入正確的 handler。
+        </p>
+
+        <div class="legend">
+          <span class="legend-item"><span class="swatch device"></span>裝置設定</span>
+          <span class="legend-item"><span class="swatch plic"></span>PLIC 設定</span>
+          <span class="legend-item"><span class="swatch cpu"></span>CPU / kernel 設定</span>
+        </div>
+
+        <div class="registration">
+          <article class="reg-step device">
+            <span class="step-number">1</span>
+            <h3>確認 IRQ ID</h3>
+            <p>IRQ ID 由 machine/platform wiring 決定，不是 VirtIO 規格固定值。</p>
+            <pre><code>VIRTIO_BLK_IRQ = 1
+VIRTIO_NET_IRQ = 2</code></pre>
+          </article>
+
+          <article class="reg-step plic">
+            <span class="step-number">2</span>
+            <h3>設定 PLIC source</h3>
+            <p>設定 priority，並在目前 hart 的 S-mode enable bitmap 開啟該 IRQ。</p>
+            <pre><code>priority[irq] = 1;
+senable |= 1 &lt;&lt; irq;
+threshold = 0;</code></pre>
+          </article>
+
+          <article class="reg-step">
+            <span class="step-number">3</span>
+            <h3>設定 CPU trap</h3>
+            <p>設定 trap 入口，允許 supervisor external interrupt，最後開 global interrupt。</p>
+            <pre><code>stvec = kernel_entry;
+sie.SEIE = 1;
+sstatus.SIE = 1;</code></pre>
+          </article>
+
+          <article class="reg-step">
+            <span class="step-number">4</span>
+            <h3>建立軟體分派</h3>
+            <p>claim 得到 IRQ ID 後，由 kernel 選擇對應 driver handler。</p>
+            <pre><code>IRQ 1 -&gt; virtio_blk_irq()
+IRQ 2 -&gt; virtio_net_irq()</code></pre>
+          </article>
+        </div>
+
+        <div class="note">
+          建議順序：先完成 device queue、PLIC、<code>stvec</code> 與 dispatch 初始化，最後才設定 <code>sstatus.SIE</code>。否則初始化中的 pending IRQ 可能提早進入尚未準備完成的 handler。
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>三層 Enable 必須同時成立</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>層級</th>
+              <th>本專案設定</th>
+              <th>作用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>PLIC source</td>
+              <td><code>priority &gt; threshold</code> 且 <code>senable[irq] = 1</code></td>
+              <td>允許特定外部 IRQ 被送往目前 hart 的 supervisor context。</td>
+            </tr>
+            <tr>
+              <td>CPU interrupt type</td>
+              <td><code>sie.SEIE = 1</code></td>
+              <td>允許 supervisor external interrupt 這個類型。</td>
+            </tr>
+            <tr>
+              <td>CPU global</td>
+              <td><code>sstatus.SIE = 1</code></td>
+              <td>允許 S-mode 當下接收已啟用的 interrupt。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="runtime">
+      <div class="section">
+        <h2>裝置提出 Interrupt Request 後</h2>
+        <p class="lead">
+          點選步驟觀察各角色。一次 supervisor external interrupt 只表示「PLIC 有可服務的來源」，CPU 必須讀 claim register 才知道實際 IRQ ID。
+        </p>
+
+        <div class="sequence" aria-label="Interrupt actors">
+          <article class="actor device" data-actor="device">
+            <h3>VirtIO Device</h3>
+            <p>完成 descriptor、更新 used ring、設定 VirtIO interrupt status，並拉起 IRQ line。</p>
+          </article>
+          <article class="actor plic" data-actor="plic">
+            <h3>PLIC</h3>
+            <p>記錄 pending source、比較 priority/threshold，向 CPU 提出 supervisor external interrupt。</p>
+          </article>
+          <article class="actor cpu" data-actor="cpu">
+            <h3>CPU + Kernel</h3>
+            <p>進入 trap、claim IRQ、執行 driver handler，最後 complete IRQ。</p>
+          </article>
+        </div>
+
+        <div class="timeline">
+          <article class="event active" tabindex="0" data-step="0" data-actors="device">
+            <span class="event-index">1</span>
+            <span class="event-route">Device</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>Device 完成工作</strong>
+              <span>例如 RX 收到 frame、TX 送完，或 block request 完成；device 先更新 used ring。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="1" data-actors="device,plic">
+            <span class="event-index">2</span>
+            <span class="event-route">Device → PLIC</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>Device 提出 IRQ request</strong>
+              <span>VirtIO MMIO 的 <code>InterruptStatus</code> 設定 used-buffer bit，平台 IRQ line 送入 PLIC source。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="2" data-actors="plic">
+            <span class="event-index">3</span>
+            <span class="event-route">PLIC</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>PLIC 選擇可服務來源</strong>
+              <span>只有 enabled、pending，而且 priority 高於 threshold 的來源才有資格通知 CPU。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="3" data-actors="plic,cpu">
+            <span class="event-index">4</span>
+            <span class="event-route">PLIC → CPU</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>CPU 進入 external interrupt trap</strong>
+              <span><code>scause.interrupt = 1</code>、cause code 為 9；此時尚不知道是 IRQ 1 還是 IRQ 2。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="4" data-actors="cpu,plic">
+            <span class="event-index">5</span>
+            <span class="event-route">CPU ↔ PLIC</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>軟體讀取 claim register</strong>
+              <span>PLIC 回傳最高優先權 IRQ ID，並由硬體把該 source 標記為 in-service。回傳 0 代表沒有可 claim 的來源。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="5" data-actors="cpu,device">
+            <span class="event-index">6</span>
+            <span class="event-route">CPU → Device</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>Driver 處理並 ACK device</strong>
+              <span>讀取 VirtIO <code>InterruptStatus</code>、寫入 <code>InterruptACK</code>，再 drain 對應 used ring。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="6" data-actors="cpu,plic">
+            <span class="event-index">7</span>
+            <span class="event-route">CPU → PLIC</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>軟體寫入 complete</strong>
+              <span>將同一 IRQ ID 寫回 claim/complete register，通知 PLIC 此次服務完成，清除 in-service 狀態。</span>
+            </span>
+          </article>
+
+          <article class="event" tabindex="0" data-step="7" data-actors="plic,cpu">
+            <span class="event-index">8</span>
+            <span class="event-route">PLIC / CPU</span>
+            <span class="event-arrow">→</span>
+            <span class="event-detail">
+              <strong>返回或處理下一個 IRQ</strong>
+              <span>若仍有其他 eligible pending source，PLIC 可再次通知 CPU；否則 trap return 回原本執行點。</span>
+            </span>
+          </article>
+        </div>
+
+        <div class="transport">
+          <button class="control-button" id="prev-step" disabled>上一步</button>
+          <span class="counter" id="step-counter">步驟 1 / 8</span>
+          <button class="control-button" id="next-step">下一步</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="concepts">
+      <div class="section">
+        <h2>Pending、Claimed 與 Completed</h2>
+        <div class="state-grid">
+          <article class="state-card">
+            <h3>PLIC source 狀態</h3>
+            <p>軟體讀 claim 時，PLIC 硬體自動選出 IRQ 並把它視為正在服務；軟體不需額外寫「in-service」flag。</p>
+            <div class="state-flow">
+              <span class="state-pill">idle</span>
+              <span class="state-arrow">→ request →</span>
+              <span class="state-pill">pending</span>
+              <span class="state-arrow">→ claim →</span>
+              <span class="state-pill current">in-service</span>
+              <span class="state-arrow">→ complete →</span>
+              <span class="state-pill">idle</span>
+            </div>
+          </article>
+
+          <article class="state-card">
+            <h3>Device completion 狀態</h3>
+            <p>PLIC 只管理 IRQ source，不知道 VirtIO queue 完成了哪些 descriptor。driver 必須另外讀 VirtIO status 與 used ring。</p>
+            <div class="state-flow">
+              <span class="state-pill">submitted</span>
+              <span class="state-arrow">→ device →</span>
+              <span class="state-pill current">used ring</span>
+              <span class="state-arrow">→ driver drain →</span>
+              <span class="state-pill">consumed</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>兩種 Acknowledge 不可互相取代</h2>
+        <div class="compare-grid">
+          <article class="compare-card">
+            <h3>VirtIO InterruptACK</h3>
+            <p>作用對象是裝置。清除 device 的 interrupt reason，例如 used-buffer completion。若漏掉，裝置可能持續保持 IRQ request。</p>
+            <pre><code>status = virtio_irq_status(dev);
+virtio_irq_ack(dev, status);</code></pre>
+          </article>
+
+          <article class="compare-card">
+            <h3>PLIC Complete</h3>
+            <p>作用對象是 PLIC。結束 claim 建立的 in-service 狀態。若漏掉，同一來源後續可能無法正常再次被 claim。</p>
+            <pre><code>irq = plic_claim();
+handle_irq(irq);
+plic_complete(irq);</code></pre>
+          </article>
+        </div>
+
+        <div class="note warn">
+          正確順序通常是：<strong>claim → device handler/ACK → drain completion → PLIC complete</strong>。只 complete PLIC 而沒有處理裝置原因，IRQ line 可能仍為 asserted；只 ACK device 而沒有 complete PLIC，控制器仍認為該 IRQ 正在服務。
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>多個 IRQ 同時發生</h2>
+        <p class="lead">
+          PLIC 依 priority 選擇可服務來源；相同 priority 時的 tie-break 由 PLIC 實作規則決定。一次 claim 只回傳一個 IRQ ID，因此 handler 應快速完成，返回後再服務其他 pending IRQ。
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>情況</th>
+              <th>PLIC / CPU 行為</th>
+              <th>Driver 注意事項</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>IRQ 1、IRQ 2 同時 pending</td>
+              <td>claim 先回傳其中一個 eligible source。</td>
+              <td>完成第一個後，另一個仍可再次觸發 external interrupt。</td>
+            </tr>
+            <tr>
+              <td>一個 IRQ 對應多個 completion</td>
+              <td>PLIC 只看到一個 source。</td>
+              <td>handler 必須 drain 整個 used ring，不能假設一次 IRQ 只有一筆。</td>
+            </tr>
+            <tr>
+              <td>處理期間同一來源再次產生事件</td>
+              <td>完成後若來源仍 pending，可再次被送達。</td>
+              <td>ACK 與 drain 順序要能處理合併、重複或晚到的 completion。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="reference">
+      <div class="section">
+        <h2>本專案程式碼對照</h2>
+        <div class="reference-grid">
+          <article class="reference-card">
+            <h3>IRQ 與 PLIC register</h3>
+            <p><code>include/plic.h</code></p>
+            <ul class="source-list">
+              <li><code>VIRTIO_BLK_IRQ 1</code></li>
+              <li><code>VIRTIO_NET_IRQ 2</code></li>
+              <li><code>PLIC_SENABLE</code>、<code>PLIC_STHRESHOLD</code>、<code>PLIC_SCLAIM</code></li>
+            </ul>
+          </article>
+
+          <article class="reference-card">
+            <h3>PLIC 初始化與 claim/complete</h3>
+            <p><code>kernel/plic.c</code></p>
+            <ul class="source-list">
+              <li><code>plic_init()</code></li>
+              <li><code>plic_enable()</code></li>
+              <li><code>plic_claim()</code> / <code>plic_complete()</code></li>
+            </ul>
+          </article>
+
+          <article class="reference-card">
+            <h3>CPU trap 與 IRQ dispatch</h3>
+            <p><code>kernel/kernel.c</code></p>
+            <ul class="source-list">
+              <li><code>kernel_entry()</code> 保存 context</li>
+              <li><code>handle_trap()</code> 判斷 scause code 9</li>
+              <li><code>handle_external_interrupt()</code> 分派 IRQ 1/2</li>
+            </ul>
+          </article>
+
+          <article class="reference-card">
+            <h3>Device ACK 與 completion</h3>
+            <p><code>kernel/virtio_blk.c</code>、<code>kernel/virtio_net.c</code></p>
+            <ul class="source-list">
+              <li><code>virtio_blk_irq()</code></li>
+              <li><code>virtio_net_irq()</code></li>
+              <li><code>virtq_pop_used()</code> drain used ring</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>本專案的初始化順序</h2>
+        <pre><code>virtio_blk_init();
+virtio_net_init();
+plic_init();
+
+sie.SEIE = 1;
+sstatus.SIE = 1;</code></pre>
+        <div class="note">
+          IRQ 1/2 是目前 QEMU <code>virt</code> machine 與 virtio-mmio bus 配置的結果。更完整的 kernel 應解析 Device Tree 的 <code>interrupts</code> 屬性，而不是永久把 IRQ ID 寫死。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll(".tab-button"));
+    const panels = Array.from(document.querySelectorAll(".panel"));
+    const events = Array.from(document.querySelectorAll(".event"));
+    const actors = Array.from(document.querySelectorAll(".actor"));
+    const previousButton = document.getElementById("prev-step");
+    const nextButton = document.getElementById("next-step");
+    const stepCounter = document.getElementById("step-counter");
+    let currentStep = 0;
+
+    function selectPanel(panelId) {
+      tabs.forEach((tab) => {
+        const active = tab.dataset.panel === panelId;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+      });
+
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.id === panelId);
+      });
+    }
+
+    function selectStep(index) {
+      currentStep = Math.max(0, Math.min(events.length - 1, index));
+      const activeActors = events[currentStep].dataset.actors.split(",");
+
+      events.forEach((event, eventIndex) => {
+        event.classList.toggle("active", eventIndex === currentStep);
+      });
+
+      actors.forEach((actor) => {
+        actor.classList.toggle("active", activeActors.includes(actor.dataset.actor));
+      });
+
+      previousButton.disabled = currentStep === 0;
+      nextButton.disabled = currentStep === events.length - 1;
+      stepCounter.textContent = `步驟 ${currentStep + 1} / ${events.length}`;
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => selectPanel(tab.dataset.panel));
+    });
+
+    events.forEach((event, index) => {
+      event.addEventListener("click", () => selectStep(index));
+      event.addEventListener("keydown", (keyboardEvent) => {
+        if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+          keyboardEvent.preventDefault();
+          selectStep(index);
+        }
+      });
+    });
+
+    previousButton.addEventListener("click", () => selectStep(currentStep - 1));
+    nextButton.addEventListener("click", () => selectStep(currentStep + 1));
+    selectStep(0);
+  </script>
+</body>
+</html>

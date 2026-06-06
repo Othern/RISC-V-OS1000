@@ -2,6 +2,7 @@
 #include "common.h"
 #include "allocator.h"
 #include "virtio.h"
+#include "plic.h"
 #include "kernel.h"
 
 struct process procs[PROCS_MAX]; // All process control structures.
@@ -84,6 +85,9 @@ static void release_process(struct process *proc) {
 }
 
 void yield(void) {
+    uint32_t saved_sstatus = READ_CSR(sstatus);
+    WRITE_CSR(sstatus, saved_sstatus & ~SSTATUS_SIE);
+
     struct process *next = idle_proc;
     if (current_proc -> state == PROC_EXITED) {
         release_process(current_proc);
@@ -99,6 +103,7 @@ void yield(void) {
 
     // If there's no runnable process other than the current one, return and continue processing
     if (next == current_proc) {
+        WRITE_CSR(sstatus, saved_sstatus);
         return;
     }
 
@@ -118,6 +123,9 @@ void yield(void) {
     struct process *prev = current_proc;
     current_proc = next;
     switch_context(&prev->sp, &next->sp);
+
+    WRITE_CSR(sscratch, 0);
+    WRITE_CSR(sstatus, saved_sstatus);
 }
 
 // ↓ __attribute__((naked)) is very important!
@@ -180,6 +188,9 @@ struct process *create_process(const void *image, size_t image_size) {
     // virtio-blk
     map_page(proc, VIRTIO_BLK_PADDR, VIRTIO_BLK_PADDR, PAGE_R | PAGE_W);
     map_page(proc, VIRTIO_NET_PADDR, VIRTIO_NET_PADDR, PAGE_R | PAGE_W);
+    map_page(proc, PLIC_BASE, PLIC_BASE, PAGE_R | PAGE_W);
+    map_page(proc, PLIC_BASE + 0x2000, PLIC_BASE + 0x2000, PAGE_R | PAGE_W);
+    map_page(proc, PLIC_BASE + 0x201000, PLIC_BASE + 0x201000, PAGE_R | PAGE_W);
 
     // Map user pages.
     for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {

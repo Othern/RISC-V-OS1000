@@ -6,6 +6,7 @@
 
 - VirtIO 1.1 規格，Network Device 章節：https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html
 - QEMU VirtIO devices 文件：https://www.qemu.org/docs/master/system/devices/virtio/index.html
+- 從 polling 改為 interrupt-driven：[`virtio-interrupts.md`](virtio-interrupts.md)
 
 ## 目前專案狀態
 
@@ -43,7 +44,7 @@ VirtIO network device 是一張虛擬 Ethernet NIC。
   - queue 1：transmit queue
   - queue 2：control queue，只有 negotiation 啟用 `VIRTIO_NET_F_CTRL_VQ` 時才需要
 
-最小可用 driver 可以先不做 interrupt，沿用目前 block driver 的 busy wait / polling 方式。
+目前專案已加入 PLIC 與 VirtIO interrupt-driven completion；`virtio_net_poll()` 僅保留為除錯 fallback。詳細流程請參考 [`virtio-interrupts.md`](virtio-interrupts.md)。
 
 ## QEMU 啟動設定
 
@@ -138,7 +139,7 @@ RX queue 的 driver 責任是先提供可寫入的 packet buffers 給 device。�
 3. RX descriptor 必須設定 `VIRTQ_DESC_F_WRITE`，表示 device 會寫入資料。
 4. 把 descriptor head 放入 available ring。
 5. kick RX queue。
-6. polling used ring；當 `used.index` 前進時，代表 device 已填入封包。
+6. device 更新 used ring 並觸發 IRQ 2；`virtio_net_irq()` drain RX used ring。
 7. 解析 buffer：前面是 `virtio_net_hdr`，後面是 Ethernet frame。
 8. 處理完後，將同一個 buffer 重新放回 RX queue。
 
@@ -152,7 +153,7 @@ TX queue 負責送出 Ethernet frame。最小流程：
 2. descriptor 指向該 buffer，不設定 `VIRTQ_DESC_F_WRITE`。
 3. 把 descriptor head 放入 available ring。
 4. kick TX queue。
-5. polling used ring，等 device 送完後釋放或重用 buffer。
+5. device 更新 used ring 並觸發 IRQ 2；`virtio_net_irq()` drain TX completion 後釋放或重用 buffer。
 
 TX 可以先用單一 outstanding packet 實作，等功能通了再加入 descriptor free list 和多封包佇列。
 

@@ -14,4 +14,5 @@ struct virtio_blk_req {
 } __attribute__((packed));
 
 void virtio_blk_init(void);
+void virtio_blk_irq(void);
 void read_write_disk(void *buf, unsigned sector, int is_write);
