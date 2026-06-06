@@ -21,5 +21,9 @@ uint32_t virtio_net_rx_packets(void);
 uint32_t virtio_net_rx_test_packets(void);
 uint32_t virtio_net_last_rx_len(void);
 uint16_t virtio_net_last_rx_ethertype(void);
+uint32_t virtio_net_copy_last_test_frame(void *dst, uint32_t capacity);
+bool virtio_net_pop_rx_frame(void *dst, uint32_t capacity,
+                             uint32_t *frame_len, uint16_t *ethertype);
+uint32_t virtio_net_rx_capture_dropped(void);
 uint32_t virtio_net_tx_packets(void);
 uint32_t virtio_net_last_tx_len(void);

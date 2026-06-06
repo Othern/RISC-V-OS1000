@@ -4,11 +4,18 @@
 #define NET_RX_QUEUE 0
 #define NET_TX_QUEUE 1
 #define NET_RX_BUF_NUM VIRTQ_ENTRY_NUM
+#define NET_RX_CAPTURE_NUM VIRTQ_ENTRY_NUM
 
 struct virtio_net_buf {
     struct virtio_net_hdr hdr;
     uint8_t frame[ETH_MAX_FRAME_SIZE];
 } __attribute__((packed));
+
+struct virtio_net_capture {
+    uint32_t len;
+    uint16_t ethertype;
+    uint8_t frame[ETH_MAX_FRAME_SIZE];
+};
 
 static struct virtio_device net_dev;
 static struct virtio_virtq *net_rx_vq;
@@ -23,6 +30,12 @@ static uint32_t net_rx_packets;
 static uint32_t net_rx_test_packets;
 static uint32_t net_last_rx_len;
 static uint16_t net_last_rx_ethertype;
+static uint8_t net_last_test_frame[ETH_MAX_FRAME_SIZE];
+static uint32_t net_last_test_frame_len;
+static struct virtio_net_capture net_rx_captures[NET_RX_CAPTURE_NUM];
+static volatile uint16_t net_rx_capture_write;
+static volatile uint16_t net_rx_capture_read;
+static volatile uint32_t net_rx_capture_drops;
 static uint32_t net_tx_packets;
 static uint32_t net_last_tx_len;
 static uint32_t net_pending_tx_len;
@@ -57,6 +70,10 @@ void virtio_net_init(void) {
     net_rx_test_packets = 0;
     net_last_rx_len = 0;
     net_last_rx_ethertype = 0;
+    net_last_test_frame_len = 0;
+    net_rx_capture_write = 0;
+    net_rx_capture_read = 0;
+    net_rx_capture_drops = 0;
     net_tx_packets = 0;
     net_last_tx_len = 0;
     net_pending_tx_len = 0;
@@ -71,6 +88,23 @@ void virtio_net_init(void) {
            net_dev.base, NET_RX_QUEUE, NET_TX_QUEUE);
 }
 
+static void virtio_net_capture_rx(const uint8_t *frame, uint32_t frame_len,
+                                  uint16_t ethertype) {
+    if ((uint16_t) (net_rx_capture_write - net_rx_capture_read) >=
+        NET_RX_CAPTURE_NUM) {
+        net_rx_capture_drops++;
+        return;
+    }
+
+    struct virtio_net_capture *capture =
+        &net_rx_captures[net_rx_capture_write % NET_RX_CAPTURE_NUM];
+    capture->len = frame_len;
+    capture->ethertype = ethertype;
+    memcpy(capture->frame, frame, frame_len);
+    __sync_synchronize();
+    net_rx_capture_write++;
+}
+
 static void virtio_net_drain_rx(void) {
     struct virtq_used_elem used;
     bool recycled = false;
@@ -81,12 +115,19 @@ static void virtio_net_drain_rx(void) {
 
         if (packet_len >= sizeof(struct virtio_net_hdr) + 14) {
             uint8_t *frame = net_rx_bufs[desc_index].frame;
+            uint32_t frame_len = packet_len - sizeof(struct virtio_net_hdr);
+            if (frame_len > ETH_MAX_FRAME_SIZE)
+                frame_len = ETH_MAX_FRAME_SIZE;
             uint16_t eth_type = ((uint16_t) frame[12] << 8) | frame[13];
             net_rx_packets++;
-            net_last_rx_len = packet_len - sizeof(struct virtio_net_hdr);
+            net_last_rx_len = frame_len;
             net_last_rx_ethertype = eth_type;
-            if (eth_type == VIRTIO_NET_TEST_ETHERTYPE)
+            virtio_net_capture_rx(frame, frame_len, eth_type);
+            if (eth_type == VIRTIO_NET_TEST_ETHERTYPE) {
+                memcpy(net_last_test_frame, frame, frame_len);
+                net_last_test_frame_len = frame_len;
                 net_rx_test_packets++;
+            }
             printf("virtio-net: rx len=%d ethertype=0x%x\n",
                    net_last_rx_len, eth_type);
         } else {
@@ -181,6 +222,47 @@ uint32_t virtio_net_last_rx_len(void) {
 
 uint16_t virtio_net_last_rx_ethertype(void) {
     return net_last_rx_ethertype;
+}
+
+uint32_t virtio_net_copy_last_test_frame(void *dst, uint32_t capacity) {
+    uint32_t saved_sstatus = READ_CSR(sstatus);
+    WRITE_CSR(sstatus, saved_sstatus & ~SSTATUS_SIE);
+
+    uint32_t copy_len = net_last_test_frame_len;
+    if (copy_len > capacity)
+        copy_len = capacity;
+    memcpy(dst, net_last_test_frame, copy_len);
+
+    WRITE_CSR(sstatus, saved_sstatus);
+    return copy_len;
+}
+
+bool virtio_net_pop_rx_frame(void *dst, uint32_t capacity,
+                             uint32_t *frame_len, uint16_t *ethertype) {
+    uint32_t saved_sstatus = READ_CSR(sstatus);
+    WRITE_CSR(sstatus, saved_sstatus & ~SSTATUS_SIE);
+
+    if (net_rx_capture_read == net_rx_capture_write) {
+        WRITE_CSR(sstatus, saved_sstatus);
+        return false;
+    }
+
+    struct virtio_net_capture *capture =
+        &net_rx_captures[net_rx_capture_read % NET_RX_CAPTURE_NUM];
+    uint32_t copy_len = capture->len;
+    if (copy_len > capacity)
+        copy_len = capacity;
+    memcpy(dst, capture->frame, copy_len);
+    *frame_len = copy_len;
+    *ethertype = capture->ethertype;
+    net_rx_capture_read++;
+
+    WRITE_CSR(sstatus, saved_sstatus);
+    return true;
+}
+
+uint32_t virtio_net_rx_capture_dropped(void) {
+    return net_rx_capture_drops;
 }
 
 uint32_t virtio_net_tx_packets(void) {

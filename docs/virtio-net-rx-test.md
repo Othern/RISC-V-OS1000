@@ -8,9 +8,10 @@
 
 1. 記錄目前 `virtio_net_rx_packets()`。
 2. 記錄目前 `virtio_net_rx_test_packets()`。
-3. 進入一段 polling window，重複呼叫 `virtio_net_poll()`。
-4. 只有收到 ethertype `0x88b5` 的測試封包才印出 PASS。
-5. 如果只收到其他背景封包，例如 IPv6 `0x86dd`，不算 PASS。
+3. 進入持續監看迴圈，直到 console 輸入 `x` 或 `X`。
+4. VirtIO network interrupt handler 會把每個收到的 Ethernet frame 放入 capture ring。
+5. 測試逐包印出 destination/source MAC、EtherType，以及完整 frame 的 hex + ASCII dump。
+6. 若輸出速度追不上接收速度，會印出 capture queue dropped 數量。
 
 測試會在 `#ifdef TEST` 區塊中先於 `test_common()` 執行，因為目前 `test_common()` 後面有 `unimp`。
 
@@ -82,10 +83,16 @@ PY
 預期 kernel 看到：
 
 ```text
-virtio-net: rx len=...
-virtio-net: rx ethertype=0x000088b5
-test_virtio_net_rx: PASS packets=... last_len=... last_ethertype=0x000088b5
+test_virtio_net_rx: monitoring received frames
+test_virtio_net_rx: press x to stop
+virtio-net: rx len=60 ethertype=0x000088b5
+test_virtio_net_rx: packet=1 len=60 ethertype=0x000088b5
+test_virtio_net_rx: dst=52:54:00:12:34:56 src=02:00:00:00:00:01 ethertype=0x000088b5
+test_virtio_net_rx: frame dump (60 bytes)
+  00000000: 52 54 00 12 34 56 02 00 00 00 00 01 88 b5 ...  |RT..4V..........|
 ```
+
+dump 從 Ethernet destination MAC 開始，不包含前面的 `virtio_net_hdr`。
 
 如果還沒送測試封包就看到：
 
