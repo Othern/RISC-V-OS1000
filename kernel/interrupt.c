@@ -6,6 +6,7 @@ void wait_for_interrupt(volatile bool *done) {
 
     WRITE_CSR(sstatus, disabled_sstatus);
     while (!*done) {
+        // WFI: wait for interrupt
         __asm__ __volatile__("wfi" ::: "memory");
 
         // A locally enabled pending interrupt wakes WFI even while sstatus.SIE

@@ -32,10 +32,12 @@ void virtio_blk_init(void) {
 }
 
 void virtio_blk_irq(void) {
+    // 讀取中斷原因
     uint32_t status = virtio_irq_status(&blk_dev);
     if (status)
+        // ACK VirtIO device 將讀到的 status 寫入 InterruptACK register，通知裝置：我已經知道這次中斷的原因。
         virtio_irq_ack(&blk_dev, status);
-
+    // 確認是否為 request completion，如果 bit 0 沒有設定，表示這次不是 used-buffer completion，函式直接返回。例如只有 config-change bit 時，目前 driver 不做進一步處理。
     if (!(status & VIRTIO_INT_USED_BUFFER))
         return;
 

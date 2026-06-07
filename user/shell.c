@@ -1,5 +1,22 @@
 #include "user.h"
 
+static int string_length(const char *s) {
+    int len = 0;
+    while (s[len])
+        len++;
+    return len;
+}
+
+static bool starts_with(const char *s, const char *prefix) {
+    while (*prefix) {
+        if (*s != *prefix)
+            return false;
+        s++;
+        prefix++;
+    }
+    return true;
+}
+
 void main(void) {
     while (1) {
 prompt:
@@ -34,6 +51,17 @@ prompt:
         }
         else if (strcmp(cmdline, "writefile") == 0)
             writefile("hello.txt", "Hello from shell!\n", 19);
+        else if (strcmp(cmdline, "send") == 0)
+            printf("usage: send <message>\n");
+        else if (starts_with(cmdline, "send ")) {
+            const char *message = cmdline + 5;
+            int message_len = string_length(message);
+            int sent = send(message, message_len);
+            if (sent < 0)
+                printf("send: failed\n");
+            else
+                printf("send: %d bytes\n", sent);
+        }
         else
             printf("unknown command: %s\n", cmdline);
     }

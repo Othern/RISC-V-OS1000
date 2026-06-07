@@ -32,6 +32,27 @@ sudo tcpdump -i tap0 -e -XX ether proto 0x88b5
 
 預期會看到 destination MAC `ff:ff:ff:ff:ff:ff`、source MAC `52:54:00:12:34:56`、ethertype `0x88b5` 的 frame。
 
+Shell 輸入：
+
+```text
+> send Hello from shell!
+```
+
+預期 guest 顯示：
+
+```text
+virtio-net: tx frame len=60 payload_len=17
+send: 17 bytes
+```
+
+`send` 後面的文字會直接成為 Ethernet payload，因此也可以輸入其他內容，例如：
+
+```text
+> send variable payload 123
+```
+
+同時 `tcpdump` 應在 Ethernet payload 中看到輸入的文字。使用預設 `NETDEV=user` 時，TX completion 仍可成功，但自訂 L2 EtherType 不一定能由 host application 觀察；要檢查完整 frame 請使用 TAP。
+
 ## QEMU 使用 TAP backend
 
 先建立 TAP：

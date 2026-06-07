@@ -174,6 +174,47 @@ void virtio_net_poll(void) {
     virtio_net_drain_tx();
 }
 
+int virtio_net_send_packet(const void *payload, int len) {
+    const int ethernet_header_len = 14;
+    const int max_payload_len = ETH_MAX_FRAME_SIZE - ethernet_header_len;
+
+    if (!net_tx_vq || !payload || len < 0 || len > max_payload_len)
+        return -1;
+
+    memset(net_tx_buf, 0, sizeof(*net_tx_buf));
+
+    uint8_t *frame = net_tx_buf->frame;
+    for (int i = 0; i < 6; i++)
+        frame[i] = 0xff;
+    frame[6] = 0x52;
+    frame[7] = 0x54;
+    frame[8] = 0x00;
+    frame[9] = 0x12;
+    frame[10] = 0x34;
+    frame[11] = 0x56;
+    frame[12] = VIRTIO_NET_TEST_ETHERTYPE >> 8;
+    frame[13] = VIRTIO_NET_TEST_ETHERTYPE & 0xff;
+    memcpy(frame + ethernet_header_len, payload, len);
+
+    unsigned frame_len = ethernet_header_len + len;
+    if (frame_len < 60)
+        frame_len = 60;
+
+    net_tx_vq->descs[0].addr = net_tx_paddr;
+    net_tx_vq->descs[0].len = sizeof(struct virtio_net_hdr) + frame_len;
+    net_tx_vq->descs[0].flags = 0;
+    net_tx_vq->descs[0].next = 0;
+
+    net_pending_tx_len = frame_len;
+    net_tx_done = false;
+    virtq_kick(&net_dev, net_tx_vq, 0);
+
+    wait_for_interrupt(&net_tx_done);
+
+    printf("virtio-net: tx frame len=%d payload_len=%d\n", frame_len, len);
+    return len;
+}
+
 void virtio_net_send_test_packet(void) {
     if (!net_tx_vq)
         return;

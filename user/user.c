@@ -23,6 +23,10 @@ int writefile(const char *filename, const char *buf, int len) {
     return syscall(SYS_WRITEFILE, (int) filename, (int) buf, len);
 }
 
+int send(const char *buf, int len) {
+    return syscall(SYS_SEND, (int) buf, len, 0);
+}
+
 __attribute__((section(".text.start")))
 __attribute__((naked))
 void start(void) {

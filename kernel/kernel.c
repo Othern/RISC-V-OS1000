@@ -225,8 +225,8 @@ void kernel_main(void) {
     #endif
 
     // dump_procs();
-    // create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
-    // yield();
+    create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
+    yield();
     PANIC("switched to idle process");
 }
 

@@ -8,3 +8,4 @@ void putchar(char ch);
 int getchar(void);
 int readfile(const char *filename, char *buf, int len);
 int writefile(const char *filename, const char *buf, int len);
+int send(const char *buf, int len);

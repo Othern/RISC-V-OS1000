@@ -3,6 +3,7 @@
 #include "kernel.h"
 #include "process.h"
 #include "filesystem.h"
+#include "virtio_net.h"
 extern struct process *current_proc;
 
 void handle_syscall(struct trap_frame *f) {
@@ -51,6 +52,12 @@ void handle_syscall(struct trap_frame *f) {
             }
 
             f->a0 = len;
+            break;
+        }
+        case SYS_SEND: {
+            const void *buf = (const void *) f->a0;
+            int len = f->a1;
+            f->a0 = virtio_net_send_packet(buf, len);
             break;
         }
         default:
