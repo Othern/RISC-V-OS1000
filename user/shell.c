@@ -17,6 +17,35 @@ static bool starts_with(const char *s, const char *prefix) {
     return true;
 }
 
+static bool parse_ipv4(const char *text, uint32_t *ip) {
+    uint32_t value = 0;
+
+    for (int part = 0; part < 4; part++) {
+        int number = 0;
+        int digits = 0;
+        while (*text >= '0' && *text <= '9') {
+            number = number * 10 + (*text - '0');
+            if (number > 255)
+                return false;
+            text++;
+            digits++;
+        }
+        if (digits == 0)
+            return false;
+        value = (value << 8) | number;
+        if (part < 3) {
+            if (*text != '.')
+                return false;
+            text++;
+        }
+    }
+
+    if (*text != '\0')
+        return false;
+    *ip = value;
+    return true;
+}
+
 void main(void) {
     while (1) {
 prompt:
@@ -61,6 +90,18 @@ prompt:
                 printf("send: failed\n");
             else
                 printf("send: %d bytes\n", sent);
+        }
+        else if (strcmp(cmdline, "arp") == 0)
+            arp_dump();
+        else if (starts_with(cmdline, "arp ")) {
+            uint32_t ip;
+            if (!parse_ipv4(cmdline + 4, &ip)) {
+                printf("usage: arp <IPv4 address>\n");
+            } else if (arp_request(ip) < 0) {
+                printf("arp: request failed\n");
+            } else {
+                printf("arp: request sent\n");
+            }
         }
         else
             printf("unknown command: %s\n", cmdline);

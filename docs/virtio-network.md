@@ -216,7 +216,7 @@ void virtq_kick(struct virtio_device *dev, struct virtio_virtq *vq, int desc_ind
 5. 新增 `virtio_net_init()`，初始化 RX queue 0 和 TX queue 1。
 6. 建立 RX buffer pool，先印出收到的 Ethernet frame type。
 7. 建立 TX path，先送出固定 Ethernet broadcast frame。
-8. 補 ARP request/reply。
+8. ARP request/reply 與固定大小 cache 已拆到 `kernel/arp.c`。
 9. 再往上做 IPv4、ICMP ping、UDP 或 TCP。
 
 ## 常見陷阱
@@ -227,4 +227,4 @@ void virtq_kick(struct virtio_device *dev, struct virtio_virtq *vq, int desc_ind
 - `avail.index` / `used.index` 是遞增 counter，ring slot 才用 `% VIRTQ_ENTRY_NUM`。
 - kick queue 前要做 memory barrier，例如現有 `__sync_synchronize()`。
 - 第一版不要啟用複雜 features，否則 packet header 長度與 checksum 行為會變複雜。
-- QEMU user-mode network 不等於 guest 自動有 TCP/IP stack；virtio-net driver 只處理 L2 Ethernet frame，上層 ARP/IP/ICMP/UDP/TCP 仍要自己實作。
+- QEMU user-mode network 不等於 guest 自動有 TCP/IP stack；virtio-net driver 只處理 L2 Ethernet frame。目前已實作基礎 ARP，上層 IPv4/ICMP/UDP/TCP 仍要自己實作。

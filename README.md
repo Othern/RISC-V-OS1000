@@ -125,7 +125,7 @@ VirtIO 已依責任拆成三層：
 - RX buffer pool：預先交給 device 寫入
 - TX buffer：driver 組好 frame 後交給 device 讀取
 
-目前 block completion 與 network RX/TX completion 由 PLIC/VirtIO interrupt 處理。`virtio_net_poll()` 仍保留為除錯 fallback；尚未實作 feature negotiation、ARP 或 IP stack。
+目前 block completion 與 network RX/TX completion 由 PLIC/VirtIO interrupt 處理。Network 已支援基礎 ARP request/reply 與固定大小 cache；`virtio_net_poll()` 仍保留為除錯 fallback。尚未實作 feature negotiation、IPv4 packet、ICMP、UDP 或 TCP。
 
 ## Build 與執行
 
@@ -187,6 +187,7 @@ QEMU network device 使用固定 MAC：
 ## 文件
 
 - [`docs/virtio-network.md`](docs/virtio-network.md)：VirtIO network 初始化、header、RX/TX queue 與實作注意事項。
+- [`docs/arp.md`](docs/arp.md)：ARP packet、cache、Request/Reply 與 shell 測試流程。
 - [`docs/virtio-interrupts.md`](docs/virtio-interrupts.md)：PLIC、trap、VirtIO ACK 與 polling 改為 interrupt-driven 的實作指南。
 - [`docs/virtio-net-rx-test.md`](docs/virtio-net-rx-test.md)：TAP、raw Ethernet frame、RX/TX 測試。
 - [`docs/virtio-network-flow.html`](docs/virtio-network-flow.html)：VirtIO network 初始化與操作流程圖。

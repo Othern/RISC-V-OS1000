@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VirtIO Network、Interrupt 與 ARP 流程</title>
+  <style>
+    :root {
+      --page: #f4f6f8;
+      --surface: #ffffff;
+      --ink: #17202a;
+      --muted: #667085;
+      --line: #cbd3dd;
+      --driver: #2563eb;
+      --driver-soft: #eaf2ff;
+      --queue: #15803d;
+      --queue-soft: #eaf8ef;
+      --device: #b45309;
+      --device-soft: #fff3df;
+      --irq: #7c3aed;
+      --irq-soft: #f2edff;
+      --arp: #b42318;
+      --arp-soft: #fff0ef;
+      --code: #202938;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      line-height: 1.55;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .header-inner,
+    main {
+      width: min(1200px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .header-inner {
+      padding: 26px 0 20px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 7px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 7px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 920px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    main {
+      padding: 20px 0 40px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 18px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--shadow);
+    }
+
+    .tab-button {
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .tab-button:hover {
+      border-color: var(--line);
+      background: #f7f8fa;
+    }
+
+    .tab-button.active {
+      border-color: var(--driver);
+      background: var(--driver);
+      color: #ffffff;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .section {
+      margin-bottom: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .lead {
+      max-width: 900px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .swatch.driver { background: var(--driver); }
+    .swatch.queue { background: var(--queue); }
+    .swatch.device { background: var(--device); }
+    .swatch.irq { background: var(--irq); }
+    .swatch.arp { background: var(--arp); }
+
+    .role-grid,
+    .queue-grid,
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .role-card,
+    .queue-card,
+    .detail-card {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .role-card.driver { border-top: 4px solid var(--driver); }
+    .role-card.queue { border-top: 4px solid var(--queue); }
+    .role-card.device { border-top: 4px solid var(--device); }
+    .role-card.irq { border-top: 4px solid var(--irq); }
+    .role-card.arp { border-top: 4px solid var(--arp); }
+
+    .role-card p,
+    .queue-card p,
+    .detail-card p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .flow {
+      display: grid;
+      gap: 8px;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: 42px minmax(150px, 0.8fr) 36px minmax(0, 2fr);
+      gap: 10px;
+      align-items: center;
+      min-height: 66px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      cursor: pointer;
+      transition: border-color 150ms ease, background 150ms ease;
+    }
+
+    .flow-step:hover {
+      border-color: var(--driver);
+    }
+
+    .flow-step.active {
+      border-color: var(--driver);
+      background: #f7faff;
+    }
+
+    .step-number {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .step-owner {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .step-arrow {
+      color: var(--muted);
+      text-align: center;
+      font-size: 20px;
+    }
+
+    .step-detail {
+      font-size: 14px;
+    }
+
+    .step-detail strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .step-detail span {
+      color: var(--muted);
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .control-button {
+      min-width: 96px;
+      min-height: 38px;
+      padding: 8px 13px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .control-button:hover:not(:disabled) {
+      border-color: var(--driver);
+    }
+
+    .control-button:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+
+    .counter {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .queue-card {
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .queue-card h3 {
+      margin: 0;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--line);
+      background: #f7f8fa;
+    }
+
+    .queue-body {
+      padding: 13px;
+    }
+
+    .slots {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+      margin-bottom: 10px;
+    }
+
+    .slot {
+      min-height: 46px;
+      padding: 7px 4px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .slot.rx {
+      border-color: #86efac;
+      background: var(--queue-soft);
+      color: #166534;
+    }
+
+    .slot.tx {
+      border-color: #fdba74;
+      background: var(--device-soft);
+      color: #9a3412;
+    }
+
+    .packet {
+      display: grid;
+      grid-template-columns: 1.1fr 1.1fr 0.8fr 2fr;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .packet-part {
+      min-height: 88px;
+      padding: 12px;
+      border-right: 1px solid var(--line);
+      background: #ffffff;
+      font-size: 13px;
+    }
+
+    .packet-part:last-child {
+      border-right: 0;
+    }
+
+    .packet-part strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .packet-part span {
+      color: var(--muted);
+    }
+
+    .packet-part.virtio { background: var(--driver-soft); }
+    .packet-part.ethernet { background: var(--queue-soft); }
+    .packet-part.type { background: var(--irq-soft); }
+    .packet-part.payload { background: var(--device-soft); }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #edf0f4;
+      color: #17202a;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow: auto;
+      margin: 0;
+      padding: 14px;
+      border-radius: 7px;
+      background: var(--code);
+      color: #f7fafc;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .note {
+      margin-top: 14px;
+      padding: 13px 14px;
+      border-left: 4px solid var(--driver);
+      background: var(--driver-soft);
+      font-size: 14px;
+    }
+
+    .note.irq {
+      border-left-color: var(--irq);
+      background: var(--irq-soft);
+    }
+
+    .note.arp {
+      border-left-color: var(--arp);
+      background: var(--arp-soft);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 11px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f7f8fa;
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    @media (max-width: 900px) {
+      .role-grid,
+      .queue-grid,
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .packet {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .packet-part:nth-child(2) {
+        border-right: 0;
+      }
+
+      .packet-part {
+        border-bottom: 1px solid var(--line);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .header-inner,
+      main {
+        width: min(100% - 20px, 1200px);
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      .section {
+        padding: 15px;
+      }
+
+      .flow-step {
+        grid-template-columns: 36px minmax(0, 1fr);
+      }
+
+      .step-owner,
+      .step-arrow {
+        display: none;
+      }
+
+      .packet {
+        grid-template-columns: 1fr;
+      }
+
+      .packet-part {
+        border-right: 0;
+      }
+
+      .transport {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>VirtIO Network、Interrupt 與 ARP 流程</h1>
+      <p class="subtitle">
+        對應目前專案實作：VirtIO MMIO network device、RX/TX split virtqueue、PLIC IRQ 2、interrupt-driven completion、RX capture ring、shell 可變 payload，以及基礎 ARP request/reply 與 cache。
+      </p>
+      <div class="legend">
+        <span class="legend-item"><span class="swatch driver"></span>Kernel / Driver</span>
+        <span class="legend-item"><span class="swatch queue"></span>Virtqueue / Ethernet</span>
+        <span class="legend-item"><span class="swatch device"></span>QEMU Device</span>
+        <span class="legend-item"><span class="swatch irq"></span>PLIC / Interrupt</span>
+        <span class="legend-item"><span class="swatch arp"></span>ARP</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <nav class="toolbar" aria-label="流程視圖">
+      <button class="tab-button active" data-panel="overview">系統總覽</button>
+      <button class="tab-button" data-panel="init">初始化</button>
+      <button class="tab-button" data-panel="rx">RX + Interrupt</button>
+      <button class="tab-button" data-panel="tx">TX + Shell</button>
+      <button class="tab-button" data-panel="arp">ARP</button>
+    </nav>
+
+    <section class="panel active" id="overview">
+      <div class="section">
+        <h2>目前完成的網路層次</h2>
+        <div class="role-grid">
+          <article class="role-card driver">
+            <h3>VirtIO-Net Driver</h3>
+            <p>掃描 MMIO device、建立 queue、管理 RX/TX buffer，並處理 VirtIO interrupt status/ACK。</p>
+          </article>
+          <article class="role-card queue">
+            <h3>Ethernet Layer 2</h3>
+            <p>建立與解析 destination MAC、source MAC、EtherType 與 payload。MAC 固定為 <code>52:54:00:12:34:56</code>。</p>
+          </article>
+          <article class="role-card arp">
+            <h3>ARP</h3>
+            <p>本機 IPv4 為 <code>10.0.2.15</code>，支援 Request、Reply、8-entry cache 與 deferred reply。</p>
+          </article>
+          <article class="role-card irq">
+            <h3>PLIC Interrupt</h3>
+            <p>VirtIO network 使用 PLIC IRQ 2。CPU claim 後執行 <code>virtio_net_irq()</code>，最後 complete。</p>
+          </article>
+          <article class="role-card device">
+            <h3>QEMU Backend</h3>
+            <p><code>NETDEV=user</code> 提供虛擬網路；<code>NETDEV=tap</code> 可讓 host 直接觀察與注入 Ethernet frame。</p>
+          </article>
+          <article class="role-card driver">
+            <h3>Shell / Syscall</h3>
+            <p><code>send &lt;message&gt;</code> 發自訂 EtherType payload；<code>arp &lt;IPv4&gt;</code> 查詢 MAC；<code>arp</code> 顯示 cache。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Packet 在 Buffer 中的排列</h2>
+        <div class="packet">
+          <div class="packet-part virtio">
+            <strong>virtio_net_hdr</strong>
+            <span>10 bytes，目前 flags/GSO/checksum 欄位為 0。</span>
+          </div>
+          <div class="packet-part ethernet">
+            <strong>Ethernet MAC</strong>
+            <span>Destination 6 bytes + Source 6 bytes。</span>
+          </div>
+          <div class="packet-part type">
+            <strong>EtherType</strong>
+            <span><code>0x88b5</code> 測試，<code>0x0806</code> ARP。</span>
+          </div>
+          <div class="packet-part payload">
+            <strong>Payload</strong>
+            <span>Shell message 或 28-byte ARP packet；Ethernet frame 不足 60 bytes 時補 0。</span>
+          </div>
+        </div>
+        <div class="note">
+          <code>virtio_net_hdr</code> 是 VirtIO transport metadata，不屬於線上的 Ethernet frame。RX 解析與 hex dump 都從 destination MAC 開始。
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Queue 結構</h2>
+        <div class="queue-grid">
+          <article class="queue-card">
+            <h3>Descriptor Table</h3>
+            <div class="queue-body">
+              <div class="slots">
+                <div class="slot rx">RX 0<br>WRITE</div>
+                <div class="slot rx">RX 1<br>WRITE</div>
+                <div class="slot rx">...</div>
+                <div class="slot rx">RX 15<br>WRITE</div>
+              </div>
+              <p>RX queue 有 16 個 writable buffers；TX queue 目前使用 descriptor 0 與單一 buffer。</p>
+            </div>
+          </article>
+          <article class="queue-card">
+            <h3>Available Ring</h3>
+            <div class="queue-body">
+              <div class="slots">
+                <div class="slot rx">desc 0</div>
+                <div class="slot rx">desc 1</div>
+                <div class="slot tx">TX desc 0</div>
+                <div class="slot">...</div>
+              </div>
+              <p>Driver 發布 descriptor index，memory barrier 後更新 avail index，再 notify device。</p>
+            </div>
+          </article>
+          <article class="queue-card">
+            <h3>Used Ring</h3>
+            <div class="queue-body">
+              <div class="slots">
+                <div class="slot rx">id<br>RX len</div>
+                <div class="slot tx">id 0<br>TX done</div>
+                <div class="slot">...</div>
+                <div class="slot">...</div>
+              </div>
+              <p><code>virtq_pop_used()</code> 逐筆消費 completion；一次 IRQ 會 drain 完所有 used entries。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="init">
+      <div class="section">
+        <h2>Kernel 初始化順序</h2>
+        <p class="lead">點選步驟可逐段閱讀。Global interrupt 最後開啟，避免 queue 或 handler 尚未準備完成就進入 IRQ。</p>
+        <div class="flow" data-flow>
+          <article class="flow-step active" tabindex="0">
+            <span class="step-number">1</span><span class="step-owner">Kernel</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>設定 trap 與 allocator</strong><span><code>stvec = kernel_entry</code>、<code>sscratch = 0</code>，接著初始化 page allocator。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">2</span><span class="step-owner">VirtIO Probe</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>掃描 VirtIO MMIO slots</strong><span>從 <code>0x10001000</code> 到 <code>0x10008000</code>，尋找 device ID 1 的 network device。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">3</span><span class="step-owner">VirtIO Status</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>Reset、ACKNOWLEDGE、DRIVER</strong><span>設定 legacy MMIO page size，開始配置 split virtqueue。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">4</span><span class="step-owner">Queues</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>建立 RX queue 0 與 TX queue 1</strong><span>配置 descriptor table、available ring、used ring，以及 RX/TX packet buffers。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">5</span><span class="step-owner">RX Pool</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>預先交出 16 個 RX buffers</strong><span>descriptor 設定 <code>VIRTQ_DESC_F_WRITE</code>，加入 available ring。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">6</span><span class="step-owner">Device</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>設定 DRIVER_OK 並 notify RX queue</strong><span>QEMU device 現在有可寫入的 RX buffer。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">7</span><span class="step-owner">ARP</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>初始化 ARP 狀態</strong><span>清空 8-entry cache 與 pending reply，本機 IPv4 設為 <code>10.0.2.15</code>。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">8</span><span class="step-owner">PLIC / CPU</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>啟用 IRQ 1/2 與 CPU external interrupt</strong><span>PLIC priority/enable/threshold 完成後，設定 <code>sie.SEIE</code> 與 <code>sstatus.SIE</code>。</span></span>
+          </article>
+        </div>
+        <div class="transport">
+          <button class="control-button" data-prev disabled>上一步</button>
+          <span class="counter" data-counter>步驟 1 / 8</span>
+          <button class="control-button" data-next>下一步</button>
+        </div>
+      </div>
+      <div class="section">
+        <pre><code>kernel_main()
+  init_regions()
+  virtio_blk_init()
+  virtio_net_init()
+    find device ID 1
+    init RX queue 0 / TX queue 1
+    enqueue 16 RX buffers
+    DRIVER_OK + RX notify
+  arp_init()
+  plic_init()              // network IRQ 2
+  sie.SEIE = 1
+  sstatus.SIE = 1
+  fs_init()
+  init_processes()
+  create shell process</code></pre>
+      </div>
+    </section>
+
+    <section class="panel" id="rx">
+      <div class="section">
+        <h2>RX 與 Interrupt-Driven Completion</h2>
+        <div class="flow" data-flow>
+          <article class="flow-step active" tabindex="0">
+            <span class="step-number">1</span><span class="step-owner">Backend</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>QEMU 收到 Ethernet frame</strong><span>來源可以是 user networking、TAP host 或 host 注入工具。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">2</span><span class="step-owner">Device</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>寫入 RX descriptor</strong><span>先寫 <code>virtio_net_hdr</code>，再寫 Ethernet frame，更新 RX used ring。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">3</span><span class="step-owner">PLIC</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>提出 VirtIO network IRQ 2</strong><span>CPU 以 supervisor external interrupt 進入 trap，claim 得到 IRQ ID 2。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">4</span><span class="step-owner">Driver</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>ACK VirtIO interrupt</strong><span><code>virtio_net_irq()</code> 讀 <code>InterruptStatus</code>，寫 <code>InterruptACK</code>。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">5</span><span class="step-owner">RX Drain</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>Drain 整個 used ring</strong><span><code>virtq_pop_used()</code> 取得 descriptor ID 與長度，解析 EtherType。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">6</span><span class="step-owner">Dispatch</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>Capture 與 EtherType dispatch</strong><span>frame 複製到 16-entry capture ring；<code>0x0806</code> 交給 <code>arp_receive()</code>。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">7</span><span class="step-owner">Recycle</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>RX buffer 放回 available ring</strong><span>所有完成項目處理後才 notify RX queue，持續維持 buffer pool。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">8</span><span class="step-owner">PLIC</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>Complete IRQ 2</strong><span>外層 handler 寫 PLIC claim/complete register，結束 in-service 狀態。</span></span>
+          </article>
+        </div>
+        <div class="transport">
+          <button class="control-button" data-prev disabled>上一步</button>
+          <span class="counter" data-counter>步驟 1 / 8</span>
+          <button class="control-button" data-next>下一步</button>
+        </div>
+        <div class="note irq">
+          正常路徑不再反覆 polling used ring。<code>virtio_net_poll()</code> 仍保留為除錯 fallback，但 kernel boot 與 RX 測試依賴 IRQ 更新 completion。
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="tx">
+      <div class="section">
+        <h2>Shell 可變 Payload 到 TX Completion</h2>
+        <div class="flow" data-flow>
+          <article class="flow-step active" tabindex="0">
+            <span class="step-number">1</span><span class="step-owner">Shell</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>輸入 <code>send &lt;message&gt;</code></strong><span>例如 <code>send Hello VirtIO</code>，shell 計算實際字串長度，不包含結尾 NUL。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">2</span><span class="step-owner">Syscall</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong><code>SYS_SEND</code></strong><span>user wrapper 將 payload pointer 與長度傳入 kernel。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">3</span><span class="step-owner">Ethernet</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>建立 broadcast 測試 frame</strong><span>dst 為 broadcast、src 為本機 MAC、EtherType 為 <code>0x88b5</code>、payload 為 shell message。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">4</span><span class="step-owner">TX Queue</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>填 descriptor 0 並 kick</strong><span>descriptor 不設 WRITE；frame 不足 60 bytes 時補 0。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">5</span><span class="step-owner">Wait</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>等待 <code>net_tx_done</code></strong><span><code>wait_for_interrupt()</code> 使用 completion flag 與 WFI，避免 busy loop。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">6</span><span class="step-owner">Device / IRQ</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>Device 送出並更新 TX used ring</strong><span>IRQ 2 進入 <code>virtio_net_drain_tx()</code>，更新 counter 並設定 done。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">7</span><span class="step-owner">Shell</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>syscall 回傳 payload bytes</strong><span>shell 顯示 <code>send: N bytes</code>。這代表 device 完成 TX descriptor。</span></span>
+          </article>
+        </div>
+        <div class="transport">
+          <button class="control-button" data-prev disabled>上一步</button>
+          <span class="counter" data-counter>步驟 1 / 7</span>
+          <button class="control-button" data-next>下一步</button>
+        </div>
+        <div class="note">
+          TX 目前只有一個 buffer 與一個 outstanding request，因此 API 是同步的。若要支援高吞吐量或從多個 context 傳送，需要 descriptor free list、TX software queue 與 per-request completion。
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="arp">
+      <div class="section">
+        <h2>ARP Request、Cache 與 Deferred Reply</h2>
+        <div class="detail-grid">
+          <article class="detail-card">
+            <h3>Request</h3>
+            <p><code>arp 10.0.2.2</code> 送出 broadcast Ethernet frame，EtherType <code>0x0806</code>，ARP operation 為 1。</p>
+          </article>
+          <article class="detail-card">
+            <h3>Cache</h3>
+            <p>收到合法 ARP Request 或 Reply 後，先學習 sender IPv4/MAC。cache 固定 8 格，滿時覆蓋第 0 格。</p>
+          </article>
+          <article class="detail-card">
+            <h3>Reply</h3>
+            <p>若 target IP 是 <code>10.0.2.15</code>，IRQ context 只保存 pending reply；<code>arp_poll()</code> 稍後送出 operation 2。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>ARP Request 流程</h2>
+        <div class="flow" data-flow>
+          <article class="flow-step active" tabindex="0">
+            <span class="step-number">1</span><span class="step-owner">Shell</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>解析 dotted IPv4</strong><span><code>arp 10.0.2.2</code> 轉成 32-bit IPv4，呼叫 <code>SYS_ARP_REQUEST</code>。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">2</span><span class="step-owner">ARP</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>建立 28-byte ARP Request</strong><span>sender IP <code>10.0.2.15</code>，target MAC 全 0，target IP 為查詢位址。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">3</span><span class="step-owner">Ethernet</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>Broadcast 發送</strong><span>destination <code>ff:ff:ff:ff:ff:ff</code>，EtherType <code>0x0806</code>。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">4</span><span class="step-owner">RX IRQ</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>收到 ARP Reply</strong><span><code>arp_receive()</code> 驗證 Ethernet/IPv4 ARP 欄位並取得 sender mapping。</span></span>
+          </article>
+          <article class="flow-step" tabindex="0">
+            <span class="step-number">5</span><span class="step-owner">Cache</span><span class="step-arrow">→</span>
+            <span class="step-detail"><strong>更新 IPv4 → MAC</strong><span>shell 再輸入 <code>arp</code> 可顯示學習結果。</span></span>
+          </article>
+        </div>
+        <div class="transport">
+          <button class="control-button" data-prev disabled>上一步</button>
+          <span class="counter" data-counter>步驟 1 / 5</span>
+          <button class="control-button" data-next>下一步</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>為什麼 Reply 要 Deferred</h2>
+        <pre><code>RX interrupt
+  virtio_net_irq()
+    virtio_net_drain_rx()
+      arp_receive()
+        update cache
+        pending_reply = true
+
+shell waits in SYS_GETCHAR
+  arp_poll()
+    build ARP Reply
+    virtio_net_send_ethernet()
+      wait for TX interrupt completion</code></pre>
+        <div class="note arp">
+          不能從 RX ISR 直接呼叫同步 TX，否則 interrupt handler 會在等待另一個 interrupt completion。現在 ISR 只記錄工作，真正傳送由 syscall/kernel context 完成。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll(".tab-button"));
+    const panels = Array.from(document.querySelectorAll(".panel"));
+
+    function selectPanel(panelId) {
+      tabs.forEach((tab) => {
+        const active = tab.dataset.panel === panelId;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.id === panelId);
+      });
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => selectPanel(tab.dataset.panel));
+    });
+
+    document.querySelectorAll("[data-flow]").forEach((flow) => {
+      const steps = Array.from(flow.querySelectorAll(".flow-step"));
+      const section = flow.closest(".section");
+      const previousButton = section.querySelector("[data-prev]");
+      const nextButton = section.querySelector("[data-next]");
+      const counter = section.querySelector("[data-counter]");
+      let current = 0;
+
+      function selectStep(index) {
+        current = Math.max(0, Math.min(steps.length - 1, index));
+        steps.forEach((step, stepIndex) => {
+          step.classList.toggle("active", stepIndex === current);
+        });
+        previousButton.disabled = current === 0;
+        nextButton.disabled = current === steps.length - 1;
+        counter.textContent = `步驟 ${current + 1} / ${steps.length}`;
+      }
+
+      steps.forEach((step, index) => {
+        step.addEventListener("click", () => selectStep(index));
+        step.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectStep(index);
+          }
+        });
+      });
+
+      previousButton.addEventListener("click", () => selectStep(current - 1));
+      nextButton.addEventListener("click", () => selectStep(current + 1));
+      selectStep(0);
+    });
+  </script>
+</body>
+</html>

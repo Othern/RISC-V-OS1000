@@ -9,3 +9,5 @@ int getchar(void);
 int readfile(const char *filename, char *buf, int len);
 int writefile(const char *filename, const char *buf, int len);
 int send(const char *buf, int len);
+int arp_request(uint32_t ip);
+void arp_dump(void);

@@ -4,6 +4,7 @@
 #include "process.h"
 #include "filesystem.h"
 #include "virtio_net.h"
+#include "arp.h"
 extern struct process *current_proc;
 
 void handle_syscall(struct trap_frame *f) {
@@ -14,6 +15,7 @@ void handle_syscall(struct trap_frame *f) {
 
         case SYS_GETCHAR:
             while (1) {
+                arp_poll();
                 long ch = getchar();
                 if (ch >= 0) {
                     f->a0 = ch;
@@ -60,6 +62,13 @@ void handle_syscall(struct trap_frame *f) {
             f->a0 = virtio_net_send_packet(buf, len);
             break;
         }
+        case SYS_ARP_REQUEST:
+            f->a0 = arp_request(f->a0);
+            break;
+        case SYS_ARP_DUMP:
+            arp_dump_cache();
+            f->a0 = 0;
+            break;
         default:
             PANIC("unexpected syscall a3=%x\n", f->a3);
     }

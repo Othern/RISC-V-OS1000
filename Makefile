@@ -37,6 +37,7 @@ KERNEL_SRCS := \
 	kernel/virtio.c \
 	kernel/virtio_blk.c \
 	kernel/virtio_net.c \
+	kernel/arp.c \
 	kernel/filesystem.c \
 	kernel/sbi.c
 

@@ -11,6 +11,7 @@
 #include "virtio_net.h"
 #include "filesystem.h"
 #include "plic.h"
+#include "arp.h"
 #include "sbi.h"
 //#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
@@ -205,10 +206,10 @@ void kernel_main(void) {
     init_regions();
     virtio_blk_init();
     virtio_net_init();
+    arp_init();
     plic_init();
     WRITE_CSR(sie, READ_CSR(sie) | SIE_SEIE);
     WRITE_CSR(sstatus, READ_CSR(sstatus) | SSTATUS_SIE);
-    virtio_net_send_test_packet();
     fs_init();
     init_processes();
     #ifdef TEST

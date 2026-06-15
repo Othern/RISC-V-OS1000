@@ -27,6 +27,14 @@ int send(const char *buf, int len) {
     return syscall(SYS_SEND, (int) buf, len, 0);
 }
 
+int arp_request(uint32_t ip) {
+    return syscall(SYS_ARP_REQUEST, ip, 0, 0);
+}
+
+void arp_dump(void) {
+    syscall(SYS_ARP_DUMP, 0, 0, 0);
+}
+
 __attribute__((section(".text.start")))
 __attribute__((naked))
 void start(void) {

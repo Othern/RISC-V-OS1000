@@ -3,6 +3,7 @@
 
 #define ETH_MAX_FRAME_SIZE 1514
 #define VIRTIO_NET_TEST_ETHERTYPE 0x88b5
+#define ETHERNET_HEADER_SIZE 14
 
 struct virtio_net_hdr {
     uint8_t flags;
@@ -16,6 +17,9 @@ struct virtio_net_hdr {
 void virtio_net_init(void);
 void virtio_net_irq(void);
 void virtio_net_poll(void);
+const uint8_t *virtio_net_mac(void);
+int virtio_net_send_ethernet(const uint8_t dst_mac[6], uint16_t ethertype,
+                             const void *payload, int len);
 int virtio_net_send_packet(const void *payload, int len);
 void virtio_net_send_test_packet(void);
 uint32_t virtio_net_rx_packets(void);

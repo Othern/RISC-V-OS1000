@@ -9,4 +9,5 @@
 *.log
 *.pcap
 /docs/*.html
+!/docs/virtio-network-flow.html
 !/docs/plic-interrupt-flow.html
