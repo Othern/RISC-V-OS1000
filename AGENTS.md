@@ -18,6 +18,7 @@ RISC-V OS1000 是一個以教學與實驗為目的的 32 位元 RISC-V 作業系
 - VirtIO network Ethernet frame RX/TX。
 - PLIC 中斷分派，以及 VirtIO block/network completion。
 - 初步 ARP request、reply 與固定大小的 ARP cache。
+- 初步 IPv4 packet parser、header checksum、固定本機 IP 與發包 helper。
 - 內嵌於 kernel image 的使用者 shell。
 
 本專案目前不是完整的通用作業系統，也沒有 preemptive scheduling、完整 POSIX API、TCP/IP stack、動態網路設定或完整的使用者指標驗證。
@@ -92,6 +93,7 @@ build/      建置產物，不應提交
 - `kernel/virtio_blk.c`：VirtIO block driver。
 - `kernel/virtio_net.c`：VirtIO network RX/TX 與 Ethernet frame 處理。
 - `kernel/arp.c`：ARP parser、request/reply 與 cache。
+- `kernel/ipv4.c`：IPv4 header 驗證、checksum、統計與發包 helper。
 - `kernel/filesystem.c`：tar-based filesystem。
 - `user/user.c`：user entry 與 syscall wrapper。
 - `user/shell.c`：互動式 shell 指令。
@@ -161,6 +163,7 @@ syscall number 定義於 `include/syscall.h`，kernel dispatch 位於 `kernel/sy
 - filesystem：`SYS_READFILE`、`SYS_WRITEFILE`
 - network：`SYS_SEND`
 - ARP：`SYS_ARP_REQUEST`、`SYS_ARP_DUMP`
+- IPv4：`SYS_IPV4_DUMP`
 
 現有 syscall 直接使用 user 傳入的 pointer，尚未完整檢查位址範圍與存取權限。新增介面時不可誤認為已有安全的 `copy_from_user()` 或 `copy_to_user()`。
 
@@ -194,7 +197,7 @@ block 與 network TX 目前都只有有限的 outstanding request 能力，並�
 
 IRQ handler 中應避免長時間 busy wait、等待另一個 IRQ、執行 filesystem I/O 或直接進行可能阻塞的工作。ARP reply 已採 deferred 方式，由 `arp_receive()` 記錄 pending reply，再由 `arp_poll()` 在非 IRQ context 傳送。
 
-## Network 與 ARP
+## Network、ARP 與 IPv4
 
 固定 guest MAC：
 
@@ -208,6 +211,8 @@ ARP 目前固定 guest IPv4：
 10.0.2.15
 ```
 
+IPv4 目前也使用同一個固定本機位址，定義於 `include/ipv4.h` 的 `IPV4_LOCAL_ADDRESS`。若修改本機 IPv4，應以此常數為單一來源，並同步更新 ARP、文件與 QEMU/TAP 測試設定。
+
 主要資料路徑：
 
 ```text
@@ -215,6 +220,7 @@ VirtIO RX used ring
   -> virtio_net_drain_rx()
   -> Ethernet EtherType dispatch
   -> arp_receive()，當 EtherType 為 0x0806
+  -> ipv4_receive()，當 EtherType 為 0x0800
 
 shell / syscall
   -> arp_request() 或 virtio_net_send_packet()
@@ -227,10 +233,15 @@ shell / syscall
 ARP cache 大小為 8，尚無 timeout、aging、LRU、routing、DHCP 或多介面支援。pending ARP reply 目前也只有一筆。修改固定 IP、MAC 或 QEMU 網路配置時，必須同步檢查：
 
 - `kernel/arp.c`
+- `kernel/ipv4.c`
+- `include/ipv4.h`
 - `kernel/virtio_net.c`
 - `Makefile`
 - `docs/arp.md`
+- `docs/ipv4.html`
 - 網路相關測試與說明
+
+IPv4 第一版支援 20-byte header 發包、收包 header 長度檢查、total length 檢查、header checksum 驗證、本機/broadcast 目的位址判斷與 protocol 統計。它尚未實作 fragmentation/reassembly、ICMP Echo reply、UDP handler、TCP state machine、route table、gateway、DHCP 或 DNS。收到 fragmented packet 時目前直接丟棄。新增 ICMP、UDP 或 TCP 時應接在 `kernel/ipv4.c` 的 protocol dispatch 後方，不應把 L4 parser 寫進 `kernel/virtio_net.c`。
 
 ## Filesystem
 
@@ -254,6 +265,7 @@ ARP cache 大小為 8，尚無 timeout、aging、LRU、routing、DHCP 或多介�
 - `readfile`
 - `writefile`
 - `send <message>`
+- `ip`
 - `arp`
 - `arp <IPv4 address>`
 
@@ -312,5 +324,6 @@ make kernel
 - `docs/virtio-interrupts.md`
 - `docs/virtio-net-rx-test.md`
 - `docs/arp.md`
+- `docs/ipv4.html`
 
 文件應描述目前已完成的行為，將尚未實作的內容明確標示為限制或後續工作。避免只根據設計文件推斷程式現況，應以 `Makefile`、header、driver 與 `kernel_main()` 的實際流程交叉確認。

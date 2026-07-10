@@ -1,6 +1,7 @@
 #include "virtio_net.h"
 #include "allocator.h"
 #include "arp.h"
+#include "ipv4.h"
 
 #define NET_RX_QUEUE 0
 #define NET_TX_QUEUE 1
@@ -127,6 +128,8 @@ static void virtio_net_drain_rx(void) {
             virtio_net_capture_rx(frame, frame_len, eth_type);
             if (eth_type == ARP_ETHERTYPE)
                 arp_receive(frame, frame_len);
+            if (eth_type == IPV4_ETHERTYPE)
+                ipv4_receive(frame, frame_len);
             if (eth_type == VIRTIO_NET_TEST_ETHERTYPE) {
                 memcpy(net_last_test_frame, frame, frame_len);
                 net_last_test_frame_len = frame_len;

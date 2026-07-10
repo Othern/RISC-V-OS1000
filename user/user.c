@@ -35,6 +35,10 @@ void arp_dump(void) {
     syscall(SYS_ARP_DUMP, 0, 0, 0);
 }
 
+void ipv4_dump(void) {
+    syscall(SYS_IPV4_DUMP, 0, 0, 0);
+}
+
 __attribute__((section(".text.start")))
 __attribute__((naked))
 void start(void) {

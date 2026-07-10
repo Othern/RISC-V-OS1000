@@ -11,3 +11,4 @@ int writefile(const char *filename, const char *buf, int len);
 int send(const char *buf, int len);
 int arp_request(uint32_t ip);
 void arp_dump(void);
+void ipv4_dump(void);

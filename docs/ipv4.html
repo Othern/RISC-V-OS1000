@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RISC-V OS1000 IPv4 協議實作</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #16202a;
+      --muted: #5d6975;
+      --line: #d7dde3;
+      --panel: #f7f9fb;
+      --blue: #2563a8;
+      --green: #23784f;
+      --red: #b23b3b;
+      --amber: #8a6217;
+      --code: #eef3f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: #ffffff;
+      line-height: 1.6;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      background: #f2f6fa;
+    }
+    .wrap {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+    header .wrap {
+      padding: 38px 0 28px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+    .lead {
+      max-width: 820px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+    main {
+      padding: 28px 0 48px;
+    }
+    section {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    p { margin: 8px 0; }
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 0.94em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--code);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 14px;
+      background: var(--panel);
+    }
+    .box strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+    .flow {
+      display: grid;
+      gap: 10px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 30px 150px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--blue);
+      border-radius: 6px;
+      background: #ffffff;
+    }
+    .num {
+      width: 26px;
+      height: 26px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #ffffff;
+      background: var(--blue);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .owner {
+      color: var(--muted);
+      font-weight: 700;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 15px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eef3f7;
+    }
+    .ok { color: var(--green); font-weight: 700; }
+    .todo { color: var(--amber); font-weight: 700; }
+    .drop { color: var(--red); font-weight: 700; }
+    @media (max-width: 820px) {
+      .grid { grid-template-columns: 1fr; }
+      .step { grid-template-columns: 30px 1fr; }
+      .owner { grid-column: 2; }
+      .step div:last-child { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>IPv4 協議實作</h1>
+      <p class="lead">
+        本頁對應目前程式碼中的 <code>kernel/ipv4.c</code> 與 <code>include/ipv4.h</code>。
+        IPv4 已接在 Ethernet EtherType <code>0x0800</code> 後方，提供 header 驗證、checksum、
+        本機位址判斷、收發 helper 與統計輸出。ICMP、UDP、TCP 仍是下一層工作。
+      </p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section>
+      <h2>目前完成範圍</h2>
+      <div class="grid">
+        <div class="box">
+          <strong class="ok">已完成</strong>
+          Ethernet 收到 <code>0x0800</code> 時呼叫 <code>ipv4_receive()</code>。
+        </div>
+        <div class="box">
+          <strong class="ok">已完成</strong>
+          驗證 version、IHL、total length、header checksum、fragment 欄位與目的 IP。
+        </div>
+        <div class="box">
+          <strong class="ok">已完成</strong>
+          <code>ipv4_send()</code> 可組 IPv4 header，透過 ARP cache 找 MAC 後送出。
+        </div>
+        <div class="box">
+          <strong class="todo">尚未完成</strong>
+          IP fragmentation / reassembly。第一版會丟棄 fragmented packet。
+        </div>
+        <div class="box">
+          <strong class="todo">尚未完成</strong>
+          ICMP Echo、UDP socket、TCP state machine。
+        </div>
+        <div class="box">
+          <strong class="todo">尚未完成</strong>
+          Route table、default gateway、DHCP、DNS。
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>資料路徑</h2>
+      <div class="flow">
+        <div class="step">
+          <span class="num">1</span>
+          <span class="owner">VirtIO RX</span>
+          <div>device 完成 RX descriptor，<code>virtio_net_drain_rx()</code> 取得 Ethernet frame。</div>
+        </div>
+        <div class="step">
+          <span class="num">2</span>
+          <span class="owner">EtherType</span>
+          <div>若 Ethernet type 是 <code>0x0806</code> 交給 ARP；若是 <code>0x0800</code> 交給 IPv4。</div>
+        </div>
+        <div class="step">
+          <span class="num">3</span>
+          <span class="owner">IPv4 RX</span>
+          <div><code>ipv4_receive()</code> 驗證 IPv4 header，丟棄格式錯誤、checksum 錯誤、fragmented 或不是送給本機的 packet。</div>
+        </div>
+        <div class="step">
+          <span class="num">4</span>
+          <span class="owner">Protocol</span>
+          <div>目前只統計 <code>ICMP=1</code>、<code>TCP=6</code>、<code>UDP=17</code>，尚未交給上層 handler。</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>IPv4 Header</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>欄位</th>
+            <th>目前行為</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>version</code> / <code>IHL</code></td>
+            <td>只接受 IPv4，IHL 至少 5。支援 header options 的長度檢查，但不解析 options。</td>
+          </tr>
+          <tr>
+            <td><code>total_length</code></td>
+            <td>必須大於等於 header 長度，且不能超過實際收到的 Ethernet payload 長度。</td>
+          </tr>
+          <tr>
+            <td><code>flags_fragment_offset</code></td>
+            <td class="drop">若 MF bit 或 fragment offset 不為 0，直接丟棄。</td>
+          </tr>
+          <tr>
+            <td><code>ttl</code></td>
+            <td>發包預設 <code>64</code>；收包目前不轉送，因此沒有遞減 TTL。</td>
+          </tr>
+          <tr>
+            <td><code>protocol</code></td>
+            <td>統計 ICMP、UDP、TCP 與 other。下一步可在這裡接 handler。</td>
+          </tr>
+          <tr>
+            <td><code>header_checksum</code></td>
+            <td>收包驗證 one's complement checksum；發包時計算 20-byte header checksum。</td>
+          </tr>
+          <tr>
+            <td><code>src_ip</code> / <code>dst_ip</code></td>
+            <td>本機固定為 <code>10.0.2.15</code>。只接受目的位址為本機或 broadcast 的 packet。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>發包流程</h2>
+      <pre><code>ipv4_send(dst_ip, protocol, payload, payload_len)
+  -> 檢查 payload 長度
+  -> dst_ip == 255.255.255.255 ? 使用 broadcast MAC
+  -> 否則查 arp_lookup(dst_ip)
+  -> cache miss 時送 arp_request(dst_ip)，本次回傳 -2
+  -> 建立 20-byte IPv4 header
+  -> 計算 header checksum
+  -> virtio_net_send_ethernet(dst_mac, 0x0800, packet, total_length)</code></pre>
+      <p>
+        這個設計讓 ARP resolution 與 IPv4 header 建立分開。之後 UDP/TCP 發包可以共用
+        <code>ipv4_send()</code>，但要自行處理 UDP/TCP checksum 與重試策略。
+      </p>
+    </section>
+
+    <section>
+      <h2>QEMU 中的觀察方式</h2>
+      <p>shell 新增 <code>ip</code> 指令，會印出本機 IPv4 與收發統計：</p>
+      <pre><code>&gt; ip
+IPv4 local=10.0.2.15
+  rx=0 drop=0 icmp=0 udp=0 tcp=0 other=0
+  tx=0 drop=0</code></pre>
+      <p>
+        TAP 模式下可以用 host 工具送 IPv4 frame，再用 <code>ip</code> 觀察統計變化。
+        目前尚未實作 ICMP reply，所以 <code>ping</code> 不會收到回應，但 ICMP RX counter 應可增加。
+      </p>
+    </section>
+  </main>
+</body>
+</html>

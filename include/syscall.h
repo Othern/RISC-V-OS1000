@@ -8,6 +8,7 @@
 #define SYS_SEND 6
 #define SYS_ARP_REQUEST 7
 #define SYS_ARP_DUMP 8
+#define SYS_IPV4_DUMP 9
 struct trap_frame;
 
 void handle_syscall(struct trap_frame *f);

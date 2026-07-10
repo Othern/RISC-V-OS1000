@@ -16,7 +16,7 @@ MAC  52:54:00:12:34:56
 IPv4 10.0.2.15
 ```
 
-`10.0.2.15` 是目前專案針對 QEMU user networking 選用的靜態位址。使用 TAP 時，應讓 host TAP 與 guest 位於相同 subnet，或修改 `kernel/arp.c` 的 `local_ip`。
+`10.0.2.15` 是目前專案針對 QEMU user networking 選用的靜態位址。使用 TAP 時，應讓 host TAP 與 guest 位於相同 subnet，或修改 `include/ipv4.h` 的 `IPV4_LOCAL_ADDRESS`。
 
 ## 模組分工
 
@@ -234,7 +234,7 @@ arp: replied to 10.0.2.2
 - cache 沒有 aging、timeout 或 LRU。
 - pending reply 只有一格。
 - 沒有 route table；ARP 目前只處理同一 Ethernet segment。
-- 尚未實作 IPv4 packet、ICMP、UDP 或 TCP。
+- 已有初步 IPv4 packet parser 與 header checksum；尚未實作 ICMP、UDP 或 TCP。
 - TX queue 仍是單一同步 buffer，不支援多個 concurrent packet。
 - syscall 尚未做完整 user pointer validation。
 
@@ -248,4 +248,3 @@ arp: replied to 10.0.2.2
    QEMU user/TAP network backend 的角色與 TAP Ethernet 連接方式。
 4. [QEMU Invocation: Network Options](https://www.qemu.org/docs/master/system/invocation.html#network-options)  
    `-netdev user`、`-netdev tap` 等 backend 參數。
-

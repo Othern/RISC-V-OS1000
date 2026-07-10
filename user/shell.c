@@ -93,6 +93,8 @@ prompt:
         }
         else if (strcmp(cmdline, "arp") == 0)
             arp_dump();
+        else if (strcmp(cmdline, "ip") == 0)
+            ipv4_dump();
         else if (starts_with(cmdline, "arp ")) {
             uint32_t ip;
             if (!parse_ipv4(cmdline + 4, &ip)) {

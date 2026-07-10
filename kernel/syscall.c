@@ -5,6 +5,7 @@
 #include "filesystem.h"
 #include "virtio_net.h"
 #include "arp.h"
+#include "ipv4.h"
 extern struct process *current_proc;
 
 void handle_syscall(struct trap_frame *f) {
@@ -67,6 +68,10 @@ void handle_syscall(struct trap_frame *f) {
             break;
         case SYS_ARP_DUMP:
             arp_dump_cache();
+            f->a0 = 0;
+            break;
+        case SYS_IPV4_DUMP:
+            ipv4_dump_stats();
             f->a0 = 0;
             break;
         default:

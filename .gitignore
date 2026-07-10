@@ -11,3 +11,4 @@
 /docs/*.html
 !/docs/virtio-network-flow.html
 !/docs/plic-interrupt-flow.html
+!/docs/ipv4.html

@@ -1,4 +1,5 @@
 #include "arp.h"
+#include "ipv4.h"
 #include "kernel.h"
 #include "virtio_net.h"
 
@@ -34,7 +35,6 @@ struct arp_pending_reply {
     uint32_t target_ip;
 };
 
-static const uint32_t local_ip = 0x0a00020f;
 static struct arp_cache_entry arp_cache[ARP_CACHE_SIZE];
 static struct arp_pending_reply pending_reply;
 
@@ -112,7 +112,7 @@ static void arp_build_packet(struct arp_packet *packet, uint16_t operation,
     packet->protocol_len = 4;
     write_be16(packet->operation, operation);
     copy_mac(packet->sender_mac, virtio_net_mac());
-    write_ipv4(packet->sender_ip, local_ip);
+    write_ipv4(packet->sender_ip, IPV4_LOCAL_ADDRESS);
     copy_mac(packet->target_mac, target_mac);
     write_ipv4(packet->target_ip, target_ip);
 }
@@ -121,7 +121,7 @@ void arp_init(void) {
     memset(arp_cache, 0, sizeof(arp_cache));
     memset(&pending_reply, 0, sizeof(pending_reply));
     printf("arp: local ip=");
-    print_ipv4(local_ip);
+    print_ipv4(IPV4_LOCAL_ADDRESS);
     printf("\n");
 }
 
@@ -142,7 +142,7 @@ void arp_receive(const uint8_t *frame, uint32_t frame_len) {
     uint16_t operation = read_be16(packet->operation);
     arp_cache_update(sender_ip, packet->sender_mac);
 
-    if (operation == ARP_OPERATION_REQUEST && target_ip == local_ip) {
+    if (operation == ARP_OPERATION_REQUEST && target_ip == IPV4_LOCAL_ADDRESS) {
         copy_mac(pending_reply.target_mac, packet->sender_mac);
         pending_reply.target_ip = sender_ip;
         __sync_synchronize();
@@ -185,6 +185,17 @@ int arp_request(uint32_t target_ip) {
                      unknown_mac, target_ip);
     return virtio_net_send_ethernet(broadcast_mac, ARP_ETHERTYPE,
                                     &request, sizeof(request));
+}
+
+bool arp_lookup(uint32_t ip, uint8_t mac[6]) {
+    for (int i = 0; i < ARP_CACHE_SIZE; i++) {
+        if (arp_cache[i].valid && arp_cache[i].ip == ip) {
+            copy_mac(mac, arp_cache[i].mac);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void arp_dump_cache(void) {
