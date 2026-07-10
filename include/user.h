@@ -12,3 +12,7 @@ int send(const char *buf, int len);
 int arp_request(uint32_t ip);
 void arp_dump(void);
 void ipv4_dump(void);
+int shm_get(int key);
+void *shm_attach(int id);
+int shm_detach(void *addr);
+void shm_dump(void);

@@ -13,6 +13,7 @@
 #include "plic.h"
 #include "arp.h"
 #include "ipv4.h"
+#include "shm.h"
 #include "sbi.h"
 //#define TEST  1
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[], __kernel_base[];
@@ -205,6 +206,7 @@ void kernel_main(void) {
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
     WRITE_CSR(sscratch, 0);
     init_regions();
+    shm_init();
     virtio_blk_init();
     virtio_net_init();
     ipv4_init();

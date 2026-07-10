@@ -4,6 +4,7 @@
 #include "virtio.h"
 #include "plic.h"
 #include "kernel.h"
+#include "shm.h"
 
 struct process procs[PROCS_MAX]; // All process control structures.
 struct process *current_proc; // Currently running process
@@ -61,6 +62,11 @@ void init_processes(void) {
         for (int j = 0; j < MAX_REGIONS; j++) {
             procs[i].regions[j] = 0;
         }
+        for (int j = 0; j < PROC_SHM_MAX; j++) {
+            procs[i].shm_mappings[j].used = 0;
+            procs[i].shm_mappings[j].shm_id = 0;
+            procs[i].shm_mappings[j].vaddr = 0;
+        }
     }
 
     // Create an idle process that runs when no other process is runnable.
@@ -70,6 +76,8 @@ void init_processes(void) {
 }
 
 static void release_process(struct process *proc) {
+    shm_process_cleanup(proc);
+
     for (uint32_t i = 0; i < proc->current_idx; i++) {
         if (proc->regions[i]) {
             release_pages(proc->regions[i]);
@@ -82,6 +90,11 @@ static void release_process(struct process *proc) {
     proc->sp = 0;
     proc->page_table = NULL;
     proc->current_idx = 0;
+    for (int i = 0; i < PROC_SHM_MAX; i++) {
+        proc->shm_mappings[i].used = 0;
+        proc->shm_mappings[i].shm_id = 0;
+        proc->shm_mappings[i].vaddr = 0;
+    }
 }
 
 void yield(void) {
@@ -158,6 +171,11 @@ struct process *create_process(const void *image, size_t image_size) {
 
     for (int j = 0; j < MAX_REGIONS; j++) {
         proc->regions[j] = 0;
+    }
+    for (int j = 0; j < PROC_SHM_MAX; j++) {
+        proc->shm_mappings[j].used = 0;
+        proc->shm_mappings[j].shm_id = 0;
+        proc->shm_mappings[j].vaddr = 0;
     }
     // Stack callee-saved registers. These register values will be restored in
     // the first context switch in switch_context.
@@ -261,4 +279,20 @@ void map_page(struct process *proc, uint32_t vaddr, paddr_t paddr, uint32_t flag
     uint32_t vpn0 = (vaddr >> 12) & 0x3ff;
     uint32_t *table0 = (uint32_t *) ((table1[vpn1] >> 10) * PAGE_SIZE);
     table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
+}
+
+void unmap_page(struct process *proc, uint32_t vaddr) {
+    uint32_t *table1 = proc->page_table;
+    if (!is_aligned(vaddr, PAGE_SIZE))
+        PANIC("unaligned vaddr %x", vaddr);
+
+    uint32_t vpn1 = (vaddr >> 22) & 0x3ff;
+    if ((table1[vpn1] & PAGE_V) == 0)
+        return;
+
+    uint32_t vpn0 = (vaddr >> 12) & 0x3ff;
+    uint32_t *table0 = (uint32_t *) ((table1[vpn1] >> 10) * PAGE_SIZE);
+    table0[vpn0] = 0;
+
+    __asm__ __volatile__("sfence.vma" ::: "memory");
 }

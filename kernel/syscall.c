@@ -6,6 +6,7 @@
 #include "virtio_net.h"
 #include "arp.h"
 #include "ipv4.h"
+#include "shm.h"
 extern struct process *current_proc;
 
 void handle_syscall(struct trap_frame *f) {
@@ -72,6 +73,19 @@ void handle_syscall(struct trap_frame *f) {
             break;
         case SYS_IPV4_DUMP:
             ipv4_dump_stats();
+            f->a0 = 0;
+            break;
+        case SYS_SHM_GET:
+            f->a0 = shm_get(f->a0);
+            break;
+        case SYS_SHM_ATTACH:
+            f->a0 = shm_attach(current_proc, f->a0);
+            break;
+        case SYS_SHM_DETACH:
+            f->a0 = shm_detach(current_proc, f->a0);
+            break;
+        case SYS_SHM_DUMP:
+            shm_dump();
             f->a0 = 0;
             break;
         default:

@@ -39,6 +39,22 @@ void ipv4_dump(void) {
     syscall(SYS_IPV4_DUMP, 0, 0, 0);
 }
 
+int shm_get(int key) {
+    return syscall(SYS_SHM_GET, key, 0, 0);
+}
+
+void *shm_attach(int id) {
+    return (void *) syscall(SYS_SHM_ATTACH, id, 0, 0);
+}
+
+int shm_detach(void *addr) {
+    return syscall(SYS_SHM_DETACH, (int) addr, 0, 0);
+}
+
+void shm_dump(void) {
+    syscall(SYS_SHM_DUMP, 0, 0, 0);
+}
+
 __attribute__((section(".text.start")))
 __attribute__((naked))
 void start(void) {

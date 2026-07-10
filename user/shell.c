@@ -46,6 +46,50 @@ static bool parse_ipv4(const char *text, uint32_t *ip) {
     return true;
 }
 
+static void copy_string(char *dst, const char *src) {
+    while (*src) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+    *dst = '\0';
+}
+
+static void run_shmtest(void) {
+    int id = shm_get(100);
+    if (id < 0) {
+        printf("shmtest: shm_get failed\n");
+        return;
+    }
+
+    char *a = shm_attach(id);
+    char *b = shm_attach(id);
+    if (!a || !b) {
+        printf("shmtest: shm_attach failed\n");
+        if (a)
+            shm_detach(a);
+        if (b)
+            shm_detach(b);
+        return;
+    }
+
+    copy_string(a, "shared-memory-ok");
+
+    printf("shmtest: id=%d\n", id);
+    printf("shmtest: va_a=0x%x va_b=0x%x\n", (uint32_t) a, (uint32_t) b);
+    printf("shmtest: read via va_b: %s\n", b);
+
+    if (strcmp(b, "shared-memory-ok") == 0)
+        printf("shmtest: PASS\n");
+    else
+        printf("shmtest: FAIL\n");
+
+    shm_dump();
+    shm_detach(a);
+    shm_detach(b);
+    shm_dump();
+}
+
 void main(void) {
     while (1) {
 prompt:
@@ -95,6 +139,10 @@ prompt:
             arp_dump();
         else if (strcmp(cmdline, "ip") == 0)
             ipv4_dump();
+        else if (strcmp(cmdline, "shm") == 0)
+            shm_dump();
+        else if (strcmp(cmdline, "shmtest") == 0)
+            run_shmtest();
         else if (starts_with(cmdline, "arp ")) {
             uint32_t ip;
             if (!parse_ipv4(cmdline + 4, &ip)) {
